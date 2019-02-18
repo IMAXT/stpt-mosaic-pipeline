@@ -1,0 +1,30 @@
+stages:
+    - test
+    - deploy
+
+test:
+  stage: test
+  tags:
+    - python
+  script:
+    - pip install --user -r requirements_dev.txt
+    - python setup.py develop --user
+    - python setup.py flake8
+    - python setup.py build_sphinx -W
+    - python setup.py test
+
+deploy:
+  stage: deploy
+  tags:
+    - python
+  only:
+    - tags
+  except:
+    - branches
+  script:
+    - pip install --user -r requirements_dev.txt
+    - python setup.py sdist
+    - curl -X MKCOL $REPO/stpt_pipeline
+    - curl -XPUT $REPO/stpt_pipeline/stpt_pipeline-0.1.0.tar.gz --data-binary @dist/stpt_pipeline-0.1.0.tar.gz
+
+

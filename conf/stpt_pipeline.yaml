@@ -1,0 +1,15 @@
+# Version of the configuration file
+version: 1
+
+# Name of the pipeline
+name: stpt
+
+# Pipeline arguments
+datalen: 100
+
+# Resources requested
+resources:
+  threads: 24
+  workers: 1
+  memory: 2G
+
