@@ -329,9 +329,6 @@ def find_overlap_conf(
             temp_bg0 = np.array(list(np.median(chi, 0)) * chi.shape[1]).reshape(
                 chi.shape
             )
-            temp_bg1 = np.array(list(np.median(chi, 1)) * chi.shape[0]).reshape(
-                chi.shape
-            )
             chi -= temp_bg0
         #
         #  now finfing the minimum
