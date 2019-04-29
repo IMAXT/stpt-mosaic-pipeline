@@ -1,13 +1,9 @@
 from os import listdir
 
-import matplotlib
 import numpy as np
-from matplotlib import pyplot as pl
 from scipy.ndimage import geometric_transform
-from scipy.ndimage.filters import gaussian_filter
 
-from chi_functions import MAD, find_overlap_conf, read_mosaicifile_stpt
-from imaxt_image.external import tifffile as tf
+from chi_functions import find_overlap_conf, read_mosaicifile_stpt
 from mosaic_functions import (find_delta, get_img_cube, get_img_list,
                               get_mosaic_file)
 

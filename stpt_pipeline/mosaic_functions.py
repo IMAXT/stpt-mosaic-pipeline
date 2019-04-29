@@ -1,8 +1,6 @@
-
-from os import listdir, mkdir, walk
+from os import listdir
 
 import numpy as np
-from scipy.misc import imresize
 
 from imaxt_image.external import tifffile as tf
 
