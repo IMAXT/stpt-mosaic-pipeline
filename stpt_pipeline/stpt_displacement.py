@@ -137,14 +137,27 @@ cof_dist = np.array([3.93716645e-05, -7.37696218e-02, 2.52457306e01]) / 2.0
 # are stored. Ideally this should be passed as an argument
 #
 root_dir = '../20190201_tumour_opticalsections_extraoverlap/'
-#
-#
-##################################################################################
-#
-# This function transform the raw images into the ones used for crossmatching
-# and mosaicing
-magic_function = lambda x: np.flipud(x / nflat)[x_min:x_max, y_min:y_max] / norm_val
-#
+
+
+def magic_function(x):
+    """[summary]
+
+    This function transform the raw images into the ones used
+    for crossmatching and mosaicing
+
+    Parameters
+    ----------
+    x : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    return np.flipud(x / nflat)[x_min:x_max, y_min:y_max] / norm_val
+
+
 # Read flat
 #
 if do_flat:
