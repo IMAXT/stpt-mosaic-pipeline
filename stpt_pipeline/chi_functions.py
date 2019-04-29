@@ -264,13 +264,13 @@ def find_overlap_conf(
         npx = np.ones((len(desp_x), len(desp_y)))
         for i in range(len(desp_y)):
             # a slice of the reference image
-            t_ref = img0[:, desp_y[i] :]
-            err_ref = np.sqrt(img0[:, desp_y[i] :])  #  assuming poisson errors
-            mask_ref = mask0[:, desp_y[i] :]
+            t_ref = img0[:, desp_y[i]:]
+            err_ref = np.sqrt(img0[:, desp_y[i]:])  #  assuming poisson errors
+            mask_ref = mask0[:, desp_y[i]:]
             # same for the other image
-            t1 = img1[:, 0 : -desp_y[i]]
-            maskt = mask1[:, 0 : -desp_y[i]]
-            err_1 = np.sqrt(img1[:, 0 : -desp_y[i]])
+            t1 = img1[:, 0: -desp_y[i]]
+            maskt = mask1[:, 0: -desp_y[i]]
+            err_1 = np.sqrt(img1[:, 0: -desp_y[i]])
             #
             for j in range(len(desp_x)):
                 if desp_x[j] < 0:
@@ -279,17 +279,17 @@ def find_overlap_conf(
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[np.abs(desp_x[j]) :,] * maskt[np.abs(desp_x[j]) :, :]
-                        - t_ref[0 : desp_x[j],] * mask_ref[0 : desp_x[j], :]
+                        t1[np.abs(desp_x[j]):, ] * maskt[np.abs(desp_x[j]):, :]
+                        - t_ref[0:desp_x[j], ] * mask_ref[0:desp_x[j], :]
                     )
                     #  combined mask
                     mask_final = (
-                        maskt[np.abs(desp_x[j]) :, :] + mask_ref[0 : desp_x[j], :]
+                        maskt[np.abs(desp_x[j]):, :] + mask_ref[0:desp_x[j], :]
                     )
                     # and erros added in cuadrature
                     div_t = np.sqrt(
-                        err_ref[0 : desp_x[j], :] ** 2
-                        + err_1[np.abs(desp_x[j]) :,] ** 2
+                        err_ref[0:desp_x[j], :] ** 2
+                        + err_1[np.abs(desp_x[j]):, ] ** 2
                     )
                     #
                 elif desp_x[j] == 0:
@@ -302,14 +302,14 @@ def find_overlap_conf(
                 else:
                     #
                     temp = (
-                        t1[0 : -desp_x[j],] * maskt[0 : -desp_x[j],]
-                        - t_ref[desp_x[j] :,] * mask_ref[desp_x[j] :,]
+                        t1[0: -desp_x[j], ] * maskt[0: -desp_x[j], ]
+                        - t_ref[desp_x[j]:, ] * mask_ref[desp_x[j]:, ]
                     )
                     #
-                    mask_final = maskt[0 : -desp_x[j],] + mask_ref[desp_x[j] :,]
+                    mask_final = maskt[0: -desp_x[j], ] + mask_ref[desp_x[j]:, ]
                     #
                     div_t = np.sqrt(
-                        err_ref[np.abs(desp_x[j]) :,] ** 2 + err_1[0 : -desp_x[j],] ** 2
+                        err_ref[np.abs(desp_x[j]):, ] ** 2 + err_1[0: -desp_x[j], ] ** 2
                     )
                     #
                 # if there are not enough good pixels we set chi to 10e7
@@ -409,16 +409,16 @@ def overlap_images(img0, img1, dx, dy):
         delta_y = 0
     overlap = np.zeros_like(big_picture)
     big_picture[
-        delta_x : delta_x + img0.shape[0], delta_y : delta_y + img0.shape[1]
+        delta_x:delta_x + img0.shape[0], delta_y:delta_y + img0.shape[1]
     ] = img0
-    overlap[delta_x : delta_x + img0.shape[0], delta_y : delta_y + img0.shape[1]] += 1
+    overlap[delta_x:delta_x + img0.shape[0], delta_y:delta_y + img0.shape[1]] += 1
     big_picture[
-        delta_x + dx : delta_x + img0.shape[0] + dx,
-        delta_y + dy : delta_y + dy + img0.shape[1],
+        delta_x + dx:delta_x + img0.shape[0] + dx,
+        delta_y + dy:delta_y + dy + img0.shape[1],
     ] += img1
     overlap[
-        delta_x + dx : delta_x + img0.shape[0] + dx,
-        delta_y + dy : delta_y + dy + img0.shape[1],
+        delta_x + dx:delta_x + img0.shape[0] + dx,
+        delta_y + dy:delta_y + dy + img0.shape[1],
     ] += 1
     #
     return big_picture, overlap
