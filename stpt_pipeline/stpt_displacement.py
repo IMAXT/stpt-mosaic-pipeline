@@ -255,7 +255,7 @@ for this_dir in dirs:
         try:
             dx_mat = np.load(this_dir + 'desp_dist_x.npy')
             dy_mat = np.load(this_dir + 'desp_dist_y.npy')
-        except:
+        except FileNotFoundError:
             print('No saved displacements found')
         #
         # This is more or less the distance between images in detectors,

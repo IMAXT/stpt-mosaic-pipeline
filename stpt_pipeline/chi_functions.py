@@ -338,7 +338,7 @@ def find_overlap_conf(
             # in case of many nans, this fails, default to middle
             dx = desp_x[i_x][0]
             dy = desp_y[i_y][0]
-        except:
+        except IndexError:
             dx = int(np.median(desp_x))
             dy = int(np.median(desp_y))
         #
