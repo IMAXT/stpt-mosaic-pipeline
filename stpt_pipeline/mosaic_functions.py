@@ -1,13 +1,27 @@
-try:
-    import tifffile as tf
-except:
-    from imaxt_image.external import tifffile as tf
+
+from os import listdir, mkdir, walk
+
 import numpy as np
-from os import listdir, walk, mkdir
 from scipy.misc import imresize
 
-#
+from imaxt_image.external import tifffile as tf
+
+
 def find_delta(dx, dy):
+    """[summary]
+
+    Parameters
+    ----------
+    dx : [type]
+        [description]
+    dy : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # In theory each position in the mosaic stage is offset
     # by a fixed value, but there's some jitter in the microscope
@@ -27,9 +41,21 @@ def find_delta(dx, dy):
     return np.max([dx_1, dx_2]), np.max([dy_1, dy_2])
 
 
-#
-#
 def get_img_list(root_dir, mosaic_size=56):
+    """[summary]
+
+    Parameters
+    ----------
+    root_dir : [type]
+        [description]
+    mosaic_size : int, optional
+        [description], by default 56
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # Scans the directory, finds the images
     #  and returns the img names, the channel number,
@@ -64,8 +90,19 @@ def get_img_list(root_dir, mosaic_size=56):
     return imgs, img_num, channel, optical_slice
 
 
-#
 def get_mosaic_file(root_dir):
+    """[summary]
+
+    Parameters
+    ----------
+    root_dir : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     # just locates the name of the stage mosaic text file
     # inside a provided dir
     for this_file in listdir(root_dir):
@@ -75,11 +112,33 @@ def get_mosaic_file(root_dir):
     return ''
 
 
-#
 def get_img_cube(
     root_dir, imgs, img_num, channel, optical_slice, channel_to_use=4, slice_to_use=1
 ):
-    #
+    """[summary]
+
+    Parameters
+    ----------
+    root_dir : [type]
+        [description]
+    imgs : [type]
+        [description]
+    img_num : [type]
+        [description]
+    channel : [type]
+        [description]
+    optical_slice : [type]
+        [description]
+    channel_to_use : int, optional
+        [description], by default 4
+    slice_to_use : int, optional
+        [description], by default 1
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     # Reads all the tiff files for a given channel and slice, and stores them into a cube.
     #
     ii = np.where(
@@ -91,9 +150,19 @@ def get_img_cube(
     return np.array(im_t)
 
 
-#
-#
 def imread(img_name):
+    """[summary]
+
+    Parameters
+    ----------
+    img_name : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     # this is just for convenience in case we change tiff library
     im_t = tf.imread(img_name).astype('float32')
     #

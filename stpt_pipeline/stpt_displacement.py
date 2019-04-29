@@ -1,26 +1,33 @@
-import matplotlib
-
-matplotlib.use('Agg')
-try:
-    import tifffile as tf
-except:
-    from imaxt_image.external import tifffile as tf
-from matplotlib import pyplot as pl
-import numpy as np
 from os import listdir
-from chi_functions import read_mosaicifile_stpt, find_overlap_conf, MAD
-from mosaic_functions import get_mosaic_file, get_img_cube, get_img_list, find_delta
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage import geometric_transform
 
-#
-##################################################################################
-#
-##################################################################################
-#
+import matplotlib
+import numpy as np
+from matplotlib import pyplot as pl
+from scipy.ndimage import geometric_transform
+from scipy.ndimage.filters import gaussian_filter
+
+from chi_functions import MAD, find_overlap_conf, read_mosaicifile_stpt
+from imaxt_image.external import tifffile as tf
+from mosaic_functions import (find_delta, get_img_cube, get_img_list,
+                              get_mosaic_file)
+
+
 # these two functions are only used to filter and defringe the flat
 def med_box(y, half_box=2):
-    #
+    """[summary]
+
+    Parameters
+    ----------
+    y : [type]
+        [description]
+    half_box : int, optional
+        [description], by default 2
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     ym = []
     for i in range(len(y)):
         # too close to cero
@@ -34,9 +41,19 @@ def med_box(y, half_box=2):
     return np.array(ym)
 
 
-#
 def defringe(img):
-    #
+    """[summary]
+
+    Parameters
+    ----------
+    img : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     fr_img = img.copy()
     for i in range(fr_img.shape[1]):
         if i < 5:
@@ -56,7 +73,26 @@ def defringe(img):
 # in order to correct for the optical distortion of the detector.
 #
 def get_coords(coords, cof, center_x, max_x, direct=True):
-    #
+    """[summary]
+
+    Parameters
+    ----------
+    coords : [type]
+        [description]
+    cof : [type]
+        [description]
+    center_x : [type]
+        [description]
+    max_x : [type]
+        [description]
+    direct : bool, optional
+        [description], by default True
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     max_desp = cof[0] * coords[1] ** 2 + cof[1] * coords[1] + cof[2]
     dy_cof = max_desp / (max_x - center_x) ** 2
     if direct:

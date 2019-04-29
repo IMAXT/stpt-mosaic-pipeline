@@ -1,13 +1,36 @@
 import numpy as np
 from scipy.signal import medfilt2d
 
-#
+
 def MAD(x):
+    """[summary]
+
+    Parameters
+    ----------
+    x : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     return np.median(np.abs(x - np.median(x)))
 
 
-#
 def read_mosaicifile_stpt(filename):
+    """[summary]
+
+    Parameters
+    ----------
+    filename : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # Reads the mosaic.txt file that sets up the stage and
     # returns the expected positions in microns
@@ -36,10 +59,31 @@ def read_mosaicifile_stpt(filename):
     return np.array(delta_x), np.array(delta_y), np.array(label_x), np.array(label_y)
 
 
-#
 def prepare_image_conf(
     img, conf, ORIENTATION='X', apply_filter=False, DOUBLE_MEDIAN=False, IMG_STD=-1
 ):
+    """[summary]
+
+    Parameters
+    ----------
+    img : [type]
+        [description]
+    conf : [type]
+        [description]
+    ORIENTATION : str, optional
+        [description], by default 'X'
+    apply_filter : bool, optional
+        [description], by default False
+    DOUBLE_MEDIAN : bool, optional
+        [description], by default False
+    IMG_STD : int, optional
+        [description], by default -1
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # Generates properly aligned images, as the crossmatching code works
     # assuming a fixed relative orientation of the images.
@@ -85,8 +129,6 @@ def prepare_image_conf(
     return img_fin, img_filt, mask_fin
 
 
-#
-#
 def find_overlap_conf(
     img_ref,
     conf_ref,
@@ -100,6 +142,38 @@ def find_overlap_conf(
     return_chi=False,
     IMG_STD=-1,
 ):
+    """[summary]
+
+    Parameters
+    ----------
+    img_ref : [type]
+        [description]
+    conf_ref : [type]
+        [description]
+    img_obj : [type]
+        [description]
+    conf_obj : [type]
+        [description]
+    ORIENTATION : str, optional
+        [description], by default 'X'
+    produce_image : bool, optional
+        [description], by default False
+    blind_start : bool, optional
+        [description], by default True
+    init_desp : list, optional
+        [description], by default [-50, 1858]
+    DOUBLE_MEDIAN : bool, optional
+        [description], by default False
+    return_chi : bool, optional
+        [description], by default False
+    IMG_STD : int, optional
+        [description], by default -1
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # This calculates the displacementes that minimize the squared difference
     # between images.
@@ -293,8 +367,25 @@ def find_overlap_conf(
             return dx, dy
 
 
-#
 def overlap_images(img0, img1, dx, dy):
+    """[summary]
+
+    Parameters
+    ----------
+    img0 : [type]
+        [description]
+    img1 : [type]
+        [description]
+    dx : [type]
+        [description]
+    dy : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     #
     # Produces a mosaiced image displacing img1
     # by dx,dy and overlapping it to img0. The
