@@ -23,6 +23,6 @@ class Settings:
     y_max = 1990
     norm_val = 10000.0
     do_flat = True
-    defring = False
+    do_defringe = False
     channel_to_use = 4
     cof_dist = np.array([3.93716645e-05, -7.37696218e-02, 2.52457306e01]) / 2.0

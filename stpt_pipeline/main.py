@@ -14,6 +14,62 @@ from .stpt_displacement import defringe, get_coords, magic_function
 log = logging.getLogger('owl.daemon.pipeline')
 
 
+def read_flatfield(flat_file):
+    """[summary]
+
+    Parameters
+    ----------
+    flat_file : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    if Settings.do_flat:
+        fl = np.load(flat_file)
+        channel = Settings.channel_to_use - 1
+        flat = fl[:, :, channel]
+        if Settings.do_defringe:
+            fr_img = defringe(flat)
+            nflat = (flat - fr_img) / np.median(flat)
+        else:
+            nflat = (flat) / np.median(flat)
+        nflat[nflat < 0.5] = 1.0
+    else:
+        nflat = 1.0
+    return nflat
+
+
+def list_directories(root_dir):
+    """[summary]
+
+    This lists all the subdirectories. Once there is an
+    standarized naming convention this will have to be edited,
+    as at the moment looks for dir names with the '4t1' string
+    on them, as all the experiments had this
+
+    Parameters
+    ----------
+    root_dir : [type]
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    dirs = []
+    for this_file in listdir(root_dir):
+        if this_file.find('4t1') > -1:
+            if this_file.find('.txt') > -1:
+                continue
+            dirs.append(root_dir + '/' + this_file + '/')
+    dirs.sort()
+    return dirs
+
+
 def main(*, root_dir: str, flat_file: str, output_dir: str):
     """[summary]
 
@@ -26,34 +82,11 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
     output_dir : str
         [description]
     """
-    # Read flat
-    if Settings.do_flat:
-        fl = np.load(flat_file)
-        channel = Settings.channel_to_use - 1
-        if Settings.defring:
-            fr_img = defringe(fl[:, :, channel])
-            nflat = (fl[:, :, channel] - fr_img) / np.median(fl[:, :, channel])
-        else:
-            nflat = (fl[:, :, channel]) / np.median(fl[:, :, channel])
-        nflat[nflat < 0.5] = 1.0
-    else:
-        nflat = 1.0
+    nflat = read_flatfield(flat_file)
+    dirs = list_directories(root_dir)
 
-    # This lists all the subdirectories. Once there is an
-    # standarized naming convention this will have to be edited,
-    # as at the moment looks for dir names with the '4t1' string
-    # on them, as all the experiments had this
-    dirs = []
-    for this_file in listdir(root_dir):
-        if this_file.find('4t1') > -1:
-            if this_file.find('.txt') > -1:
-                continue
-            dirs.append(root_dir + '/' + this_file + '/')
-    dirs.sort()
-
-    # Now we loop over all subirectories
     for this_dir in dirs:
-        log.info('Directory %s', this_dir)
+        log.info('Processing directory %s', this_dir)
         # read mosaic file, get delta in microns
         mosaic_file = get_mosaic_file(this_dir)
         dx, dy, lx, ly = read_mosaicifile_stpt(this_dir + mosaic_file)
@@ -79,8 +112,8 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         # std_img is the per pixel std of the cube,
         # shapes is the reference detector size
         #
-        std_img = magic_function(np.std(img_cube, 0))
-        shapes = magic_function(img_cube[0, ...]).shape
+        std_img = magic_function(np.std(img_cube, 0), flat=nflat)
+        shapes = magic_function(img_cube[0, ...], flat=nflat).shape
         #
         print(
             'Found {0:d} images, cube STD {1:.3f}'.format(
@@ -91,8 +124,8 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         # the geometrical transform to correct distortion
         # leaves some pixels empty, so these are set to zero in
         # this conf. map. As all images go through the same initial
-        # transformation, only on conf map is needed
-        general_conf = np.ones_like(magic_function(img_cube[0, ...]))
+        # transformation, only one conf map is needed
+        general_conf = np.ones_like(magic_function(img_cube[0, ...], flat=nflat))
         dist_conf = geometric_transform(
             general_conf,
             get_coords,
@@ -160,7 +193,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                 # Transformed images
                 #
                 new_ref = geometric_transform(
-                    magic_function(img_cube[ind_ref, ...]),
+                    magic_function(img_cube[ind_ref, ...], flat=nflat),
                     get_coords,
                     output_shape=(int(shapes[0]), shapes[1]),
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
@@ -170,7 +203,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                     order=1,
                 )
                 new_obj = geometric_transform(
-                    magic_function(img_cube[ind_obj, ...]),
+                    magic_function(img_cube[ind_obj, ...], flat=nflat),
                     get_coords,
                     output_shape=(int(shapes[0]), shapes[1]),
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
