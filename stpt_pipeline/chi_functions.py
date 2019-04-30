@@ -137,7 +137,7 @@ def find_overlap_conf(
     ORIENTATION='X',
     produce_image=False,
     blind_start=True,
-    init_desp=[-50, 1858],
+    init_desp=None,
     DOUBLE_MEDIAN=False,
     return_chi=False,
     IMG_STD=-1,
@@ -192,6 +192,8 @@ def find_overlap_conf(
         DELTA = [16, 8, 1]
     else:
         DELTA = [8, 2, 1]
+        if init_desp is None:
+            init_desp = [-50, 1858]
         dx = init_desp[0]
         dy = init_desp[1]
     #
