@@ -146,13 +146,6 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         dy_mat = np.zeros((len(dx), len(dx))) - 9999
         #
         for i in range(len(dx0)):
-            # pick up if crash by reloading already calculated
-            # displacements
-            try:
-                dx_mat = np.load(this_dir + 'desp_dist_x.npy')
-                dy_mat = np.load(this_dir + 'desp_dist_y.npy')
-            except FileNotFoundError:
-                print('No saved displacements found')
             #
             # This is more or less the distance between images in detectors,
             # so we only crossmatch images withn 1 detector size of the
@@ -244,6 +237,6 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                     #
                     dx_mat[ind_obj, ind_ref] = -dy
                     dy_mat[ind_obj, ind_ref] = dx
-                # storing
-                np.save(this_dir + 'desp_dist_x', dx_mat)
-                np.save(this_dir + 'desp_dist_y', dy_mat)
+
+        np.save(output_dir + 'desp_dist_x', dx_mat)
+        np.save(output_dir + 'desp_dist_y', dy_mat)
