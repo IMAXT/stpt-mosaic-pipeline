@@ -82,7 +82,10 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
     output_dir : str
         [description]
     """
+    log.info('Reading flatfield %s', flat_file)
     nflat = read_flatfield(flat_file)
+
+    log.info('Getting directory listing %s', root_dir)
     dirs = list_directories(root_dir)
 
     for this_dir in dirs:
@@ -91,6 +94,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         mosaic_file = get_mosaic_file(this_dir)
         dx, dy, lx, ly = read_mosaicifile_stpt(this_dir + mosaic_file)
         delta_x, delta_y = find_delta(dx, dy)
+        log.debug('delta_x : %s , delta_y: %s', delta_x, delta_y)
         # dx0,dy0 are just the coordinates of each image
         # in columns/rows
         dx0 = np.round((dx - dx.min()) / delta_x).astype(int)
@@ -115,11 +119,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         std_img = magic_function(np.std(img_cube, 0), flat=nflat)
         shapes = magic_function(img_cube[0, ...], flat=nflat).shape
         #
-        print(
-            'Found {0:d} images, cube STD {1:.3f}'.format(
-                img_cube.shape[0], np.mean(std_img)
-            )
-        )
+        log.info('Found %d images, cube STD %.3f', img_cube.shape[0], np.mean(std_img))
         # Default confidence map, as the array is square but
         # the geometrical transform to correct distortion
         # leaves some pixels empty, so these are set to zero in
@@ -165,9 +165,9 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
             for this_img in i_t:
                 if dx_mat[i, this_img] != -9999:
                     # already done
-                    print('({0:2d},{1:2d}) already done'.format(i, this_img))
+                    log.debug('(%d, %d) already done', i, this_img)
                     continue
-                print('Finding shifts for ({0:2d},{1:2d})'.format(i, this_img))
+                log.info('Finding shifts for (%d, %d)', i, this_img)
                 #
                 # Find relative orientation. As the crossmatching code always assumes
                 # that the images are aligned along the X axis and the reference is to
@@ -189,11 +189,14 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                         ind_ref = this_img
                         ind_obj = i
                         continue
+                log.debug('Orientation %s', ORIENTATION)
                 #
                 # Transformed images
                 #
+                im_ref = magic_function(img_cube[ind_ref, ...], flat=nflat)
+                log.debug('Transforming image %d', ind_ref)
                 new_ref = geometric_transform(
-                    magic_function(img_cube[ind_ref, ...], flat=nflat),
+                    im_ref,
                     get_coords,
                     output_shape=(int(shapes[0]), shapes[1]),
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
@@ -202,8 +205,11 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                     cval=0.0,
                     order=1,
                 )
+
+                im_obj = magic_function(img_cube[ind_obj, ...], flat=nflat)
+                log.debug('Transforming image %d', ind_obj)
                 new_obj = geometric_transform(
-                    magic_function(img_cube[ind_obj, ...], flat=nflat),
+                    im_obj,
                     get_coords,
                     output_shape=(int(shapes[0]), shapes[1]),
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
@@ -213,6 +219,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
                     order=1,
                 )
                 # finding shift
+                log.debug('Finding shifts')
                 dx, dy, mer = find_overlap_conf(
                     new_ref,
                     dist_conf,

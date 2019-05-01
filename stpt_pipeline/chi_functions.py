@@ -1,5 +1,9 @@
+import logging
+
 import numpy as np
 from scipy.signal import medfilt2d
+
+log = logging.getLogger('owl.daemon.pipeline')
 
 
 def MAD(x):
@@ -222,7 +226,7 @@ def find_overlap_conf(
     #
     #
     for i_delta in range(len(DELTA)):
-        print('Iteration {0:1d}'.format(i_delta + 1))
+        log.info('Iteration %d', i_delta + 1)
         # the first iteration sets up the displacements to be
         # evaluated
         if (i_delta == 0) & blind_start:
@@ -344,7 +348,7 @@ def find_overlap_conf(
             dx = int(np.median(desp_x))
             dy = int(np.median(desp_y))
         #
-        print('Found min at dx={0:4d},dy={1:4d}'.format(dx, dy))
+        log.info('Found min at dx=%d, dy=%d', dx, dy)
     #
     # now on to generate the relevant outputs
     #
