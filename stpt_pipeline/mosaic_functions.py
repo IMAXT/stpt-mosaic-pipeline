@@ -2,7 +2,7 @@ from os import listdir
 
 import numpy as np
 
-from imaxt_image.external import tifffile as tf
+from imaxt_image.image import TiffImage
 
 
 def find_delta(dx, dy):
@@ -143,25 +143,5 @@ def get_img_cube(
         (channel == channel_to_use)
         & ((optical_slice - np.min(optical_slice) + 1) == slice_to_use)
     )[0]
-    im_t = [tf.imread(root_dir + t).astype('float32') for t in imgs[ii]]
-    #
-    return np.array(im_t)
-
-
-def imread(img_name):
-    """[summary]
-
-    Parameters
-    ----------
-    img_name : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    # this is just for convenience in case we change tiff library
-    im_t = tf.imread(img_name).astype('float32')
-    #
-    return im_t
+    im_t = [TiffImage(root_dir / t).asarray() for t in imgs[ii]]
+    return np.array(im_t).astype('float32')
