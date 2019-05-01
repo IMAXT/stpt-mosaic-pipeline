@@ -104,7 +104,7 @@ def get_coords(coords, cof, center_x, max_x, direct=True):
         )
 
 
-def magic_function(x, nflat=1):  # TODO: Call this some other name
+def magic_function(x, flat=1):  # TODO: Call this some other name
     """[summary]
 
     This function transform the raw images into the ones used
@@ -125,5 +125,5 @@ def magic_function(x, nflat=1):  # TODO: Call this some other name
     x_min, x_max = Settings.x_min, Settings.x_max
     y_min, y_max = Settings.y_min, Settings.y_max
     norm_val = Settings.norm_val
-    res = np.flipud(x / nflat)[x_min:x_max, y_min:y_max] / norm_val
+    res = np.flipud(x / flat)[x_min:x_max, y_min:y_max] / norm_val
     return res
