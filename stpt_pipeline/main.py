@@ -1,5 +1,6 @@
 import logging
 from os import listdir
+from pathlib import Path
 
 import numpy as np
 from dask import delayed  # noqa: F401
@@ -65,21 +66,21 @@ def list_directories(root_dir):
         if this_file.find('4t1') > -1:
             if this_file.find('.txt') > -1:
                 continue
-            dirs.append(root_dir + '/' + this_file + '/')
+            dirs.append(root_dir / this_file)
     dirs.sort()
     return dirs
 
 
-def main(*, root_dir: str, flat_file: str, output_dir: str):
+def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
     """[summary]
 
     Parameters
     ----------
-    root_dir : str
+    root_dir : Path
         [description]
-    flat_file : str
+    flat_file : Path
         [description]
-    output_dir : str
+    output_dir : Path
         [description]
     """
     log.info('Reading flatfield %s', flat_file)
@@ -92,7 +93,7 @@ def main(*, root_dir: str, flat_file: str, output_dir: str):
         log.info('Processing directory %s', this_dir)
         # read mosaic file, get delta in microns
         mosaic_file = get_mosaic_file(this_dir)
-        dx, dy, lx, ly = read_mosaicifile_stpt(this_dir + mosaic_file)
+        dx, dy, lx, ly = read_mosaicifile_stpt(this_dir / mosaic_file)
         delta_x, delta_y = find_delta(dx, dy)
         log.debug('delta_x : %s , delta_y: %s', delta_x, delta_y)
         # dx0,dy0 are just the coordinates of each image
