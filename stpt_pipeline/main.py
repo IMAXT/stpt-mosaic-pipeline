@@ -2,20 +2,21 @@ import logging
 from os import listdir
 from pathlib import Path
 
+import dask.array as da
 import numpy as np
 from dask import delayed  # noqa: F401
+from distributed import Client, wait
 from scipy.ndimage import geometric_transform
 
 from .chi_functions import find_overlap_conf, read_mosaicifile_stpt
-from .mosaic_functions import (find_delta, get_img_cube, get_img_list,
-                               get_mosaic_file)
+from .mosaic_functions import find_delta, get_img_cube, get_img_list, get_mosaic_file
 from .settings import Settings
 from .stpt_displacement import defringe, get_coords, magic_function
 
 log = logging.getLogger('owl.daemon.pipeline')
 
 
-def read_flatfield(flat_file):
+def read_flatfield(flat_file: Path):
     """[summary]
 
     Parameters
@@ -28,6 +29,7 @@ def read_flatfield(flat_file):
     [type]
         [description]
     """
+    log.info('Reading flatfield %s', flat_file)
     if Settings.do_flat:
         fl = np.load(flat_file)
         channel = Settings.channel_to_use - 1
@@ -36,14 +38,14 @@ def read_flatfield(flat_file):
             fr_img = defringe(flat)
             nflat = (flat - fr_img) / np.median(flat)
         else:
-            nflat = (flat) / np.median(flat)
+            nflat = flat / np.median(flat)
         nflat[nflat < 0.5] = 1.0
     else:
         nflat = 1.0
     return nflat
 
 
-def list_directories(root_dir):
+def list_directories(root_dir: Path):
     """[summary]
 
     This lists all the subdirectories. Once there is an
@@ -83,8 +85,9 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
     output_dir : Path
         [description]
     """
-    log.info('Reading flatfield %s', flat_file)
-    nflat = read_flatfield(flat_file)
+    client = Client.current()
+
+    nflat = delayed(read_flatfield)(flat_file)
 
     log.info('Getting directory listing %s', root_dir)
     dirs = list_directories(root_dir)
@@ -101,7 +104,9 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
         dx0 = np.round((dx - dx.min()) / delta_x).astype(int)
         dy0 = np.round((dy - dy.min()) / delta_y).astype(int)
         # get image names and select the first optical slice
-        imgs, img_num, channel, optical_slice = get_img_list(this_dir, mosaic_size=len(dx))
+        imgs, img_num, channel, optical_slice = get_img_list(
+            this_dir, mosaic_size=len(dx)
+        )
         optical_slice = optical_slice - optical_slice.min() + 1
         # read image cube
         img_cube = get_img_cube(
@@ -112,25 +117,28 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
             optical_slice,
             channel_to_use=Settings.channel_to_use,
             slice_to_use=optical_slice.min(),
-        )
-        #
+        ).persist()
+
         # std_img is the per pixel std of the cube,
         # shapes is the reference detector size
-        #
-        std_img = magic_function(np.std(img_cube, 0), flat=nflat)
-        shapes = magic_function(img_cube[0, ...], flat=nflat).shape
-        #
-        log.info('Found %d images, cube STD %.3f', img_cube.shape[0], np.mean(std_img))
+        img_cube_std = delayed(np.std)(img_cube, axis=0)
+        std_img = delayed(magic_function)(img_cube_std, flat=nflat)
+        std_img_mean = delayed(np.mean)(std_img)
+        shapes = (Settings.x_max - Settings.x_min, Settings.y_max - Settings.y_min)
+
+        log.info(
+            'Found %d images, cube STD %.3f', img_cube.shape[0], std_img_mean.compute()
+        )
         # Default confidence map, as the array is square but
         # the geometrical transform to correct distortion
         # leaves some pixels empty, so these are set to zero in
         # this conf. map. As all images go through the same initial
         # transformation, only one conf map is needed
-        general_conf = np.ones_like(magic_function(img_cube[0, ...], flat=nflat))
-        dist_conf = geometric_transform(
+        general_conf = np.ones_like(img_cube[0])
+        dist_conf = delayed(geometric_transform)(
             general_conf,
             get_coords,
-            output_shape=(int(shapes[0]), shapes[1]),
+            output_shape=shapes,
             extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
             extra_keywords={'direct': True},
             mode='constant',
@@ -156,6 +164,8 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
             r[i] = 100
             i_t = np.where(r <= 1)[0]
             #
+            results = []
+            data_desc = []
             for this_img in i_t:
                 if dx_mat[i, this_img] != -9999:
                     # already done
@@ -187,12 +197,11 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                 #
                 # Transformed images
                 #
-                im_ref = magic_function(img_cube[ind_ref, ...], flat=nflat)
-                log.debug('Transforming image %d', ind_ref)
-                new_ref = geometric_transform(
+                im_ref = delayed(magic_function)(img_cube[ind_ref], flat=nflat)
+                new_ref = delayed(geometric_transform)(
                     im_ref,
                     get_coords,
-                    output_shape=(int(shapes[0]), shapes[1]),
+                    output_shape=shapes,
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
                     extra_keywords={'direct': True},
                     mode='constant',
@@ -200,12 +209,11 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                     order=1,
                 )
 
-                im_obj = magic_function(img_cube[ind_obj, ...], flat=nflat)
-                log.debug('Transforming image %d', ind_obj)
-                new_obj = geometric_transform(
+                im_obj = delayed(magic_function)(img_cube[ind_obj], flat=nflat)
+                new_obj = delayed(geometric_transform)(
                     im_obj,
                     get_coords,
-                    output_shape=(int(shapes[0]), shapes[1]),
+                    output_shape=shapes,
                     extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0]),
                     extra_keywords={'direct': True},
                     mode='constant',
@@ -214,7 +222,7 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                 )
                 # finding shift
                 log.debug('Finding shifts')
-                dx, dy, mer = find_overlap_conf(
+                res = delayed(find_overlap_conf)(
                     new_ref,
                     dist_conf,
                     new_obj,
@@ -225,7 +233,16 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                     DOUBLE_MEDIAN=False,
                     IMG_STD=np.mean(std_img),
                 )
-                # undoing the index shifts
+                results.append(res)
+                data_desc.append([ORIENTATION, ind_ref, ind_obj])
+
+            futures = client.compute(results)
+            wait(futures)
+            for dd, fut in zip(data_desc, futures):
+                dx, dy, mer = fut.result()
+                ORIENTATION, ind_ref, ind_obj = dd
+                log.info('%s %s', dx, dy)
+
                 if ORIENTATION == 'Y':
                     dx_mat[ind_ref, ind_obj] = dx
                     dy_mat[ind_ref, ind_obj] = dy
@@ -239,5 +256,8 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                     dx_mat[ind_obj, ind_ref] = -dy
                     dy_mat[ind_obj, ind_ref] = dx
 
-        np.save(output_dir + 'desp_dist_x', dx_mat)
-        np.save(output_dir + 'desp_dist_y', dy_mat)
+        out = output_dir / this_dir.name
+        out.mkdir(exist_ok=True)
+        log.debug('Saving results to %s', out)
+        np.save(out / 'desp_dist_x', dx_mat)
+        np.save(out / 'desp_dist_y', dy_mat)

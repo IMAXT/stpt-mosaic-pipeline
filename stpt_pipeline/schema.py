@@ -1,5 +1,6 @@
-import voluptuous as vo
 from pathlib import Path
+
+import voluptuous as vo
 
 schema = vo.Schema(
     {

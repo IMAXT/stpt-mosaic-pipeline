@@ -1,5 +1,6 @@
 from os import listdir
 
+import dask.array as da
 import numpy as np
 
 from imaxt_image.image import TiffImage
@@ -111,7 +112,14 @@ def get_mosaic_file(root_dir):
 
 
 def get_img_cube(
-    root_dir, imgs, img_num, channel, optical_slice, channel_to_use=4, slice_to_use=1
+    root_dir,
+    imgs,
+    img_num,
+    channel,
+    optical_slice,
+    channel_to_use=4,
+    slice_to_use=1,
+    dtype='float32',
 ):
     """[summary]
 
@@ -143,5 +151,9 @@ def get_img_cube(
         (channel == channel_to_use)
         & ((optical_slice - np.min(optical_slice) + 1) == slice_to_use)
     )[0]
-    im_t = [TiffImage(root_dir / t).asarray() for t in imgs[ii]]
-    return np.array(im_t).astype('float32')
+    im_t = [TiffImage(root_dir / t) for t in imgs[ii]]
+    im_t = [da.from_array(t, chunks=t.shape) for t in im_t]
+    cube = da.stack(im_t)
+    if dtype:
+        cube = cube.astype(dtype)
+    return cube
