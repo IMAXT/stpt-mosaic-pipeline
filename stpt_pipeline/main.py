@@ -241,5 +241,6 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
 
         out = output_dir / this_dir.name
         out.mkdir(exist_ok=True)
+        log.debug('Saving results to %s', out)
         np.save(out / 'desp_dist_x', dx_mat)
         np.save(out / 'desp_dist_y', dy_mat)
