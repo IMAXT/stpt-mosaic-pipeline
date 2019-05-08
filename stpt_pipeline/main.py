@@ -239,5 +239,7 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                     dx_mat[ind_obj, ind_ref] = -dy
                     dy_mat[ind_obj, ind_ref] = dx
 
-        np.save(output_dir + 'desp_dist_x', dx_mat)
-        np.save(output_dir + 'desp_dist_y', dy_mat)
+        out = output_dir / this_dir.name
+        out.mkdir(exist_ok=True)
+        np.save(out / 'desp_dist_x', dx_mat)
+        np.save(out / 'desp_dist_y', dy_mat)
