@@ -1,3 +1,5 @@
+from Cython.Build import cythonize
+from setuptools.extension import Extension
 from setuptools import find_packages, setup
 
 with open('README.rst') as readme_file:
@@ -32,6 +34,7 @@ setup(
     keywords='stpt_pipeline',
     name='stpt_pipeline',
     packages=find_packages(include=['stpt_pipeline']),
+    ext_modules=cythonize(Extension('stpt_pipeline.utils', ['stpt_pipeline/utils.pyx'])),
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,

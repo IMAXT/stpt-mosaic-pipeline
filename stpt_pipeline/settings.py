@@ -25,4 +25,4 @@ class Settings:
     do_flat = True
     do_defringe = False
     channel_to_use = 4
-    cof_dist = np.array([3.93716645e-05, -7.37696218e-02, 2.52457306e01]) / 2.0
+    cof_dist = (3.93716645e-05 / 2, -7.37696218e-02 / 2, 2.52457306e01 / 2)

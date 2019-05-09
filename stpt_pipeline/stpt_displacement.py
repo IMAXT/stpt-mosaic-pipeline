@@ -60,52 +60,6 @@ def defringe(img):
     return fr_img
 
 
-#
-#  get_coords is the function that feeds geometric_transform
-# in order to correct for the optical distortion of the detector.
-#
-def get_coords(coords, cof, center_x, max_x, direct=True):
-    """[summary]
-
-    Parameters
-    ----------
-    coords : [type]
-        [description]
-    cof : [type]
-        [description]
-    center_x : [type]
-        [description]
-    max_x : [type]
-        [description]
-    direct : bool, optional
-        [description], by default True
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    max_desp = cof[0] * coords[1] ** 2 + cof[1] * coords[1] + cof[2]
-    dy_cof = max_desp / (max_x - center_x) ** 2
-    if direct:
-        if coords[0] > center_x:
-            sign = 1
-        else:
-            sign = -1
-        xi = np.abs(coords[0] - center_x)
-        return (center_x + sign * (xi + dy_cof * xi ** 2), coords[1])
-    else:
-        if coords[0] > center_x + cof[2]:
-            sign = 1
-        else:
-            sign = -1
-        xi = np.abs(coords[0] - center_x - cof[2])
-        return (
-            center_x + sign * (np.sqrt(1 + 4 * dy_cof * xi) - 1) / (2 * dy_cof),
-            coords[1],
-        )
-
-
 def magic_function(x, flat=1):  # TODO: Call this some other name
     """[summary]
 
