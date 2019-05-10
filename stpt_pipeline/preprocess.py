@@ -8,15 +8,17 @@ import zarr
 from dask import delayed
 from distributed import Client, wait
 from scipy.ndimage import geometric_transform
+from zarr import blosc
 
 from imaxt_image.image import TiffImage
 from stpt_pipeline.utils import get_coords
 
-from .mosaic_functions import get_mosaic_file
+from .mosaic_functions import parse_mosaic_file
 from .settings import Settings
 from .stpt_displacement import defringe, magic_function
 
 log = logging.getLogger('owl.daemon.pipeline')
+blosc.use_threads = False  # TODO: Check if this makes it quicker or slower
 
 
 def read_flatfield(flat_file: Path):
@@ -141,14 +143,11 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
     z = zarr.group(out, 'w')
 
     dirs = list_directories(root_dir)
-    for d in dirs:
+    for d in dirs[:2]:
         # TODO: All this should be metadata
         section = re.compile(r'\d\d\d\d$').search(d.name).group()
-        mosaic_file = get_mosaic_file(d)
-        res = open(d / mosaic_file, 'r').read()
-        mrows = re.compile(r'mrows:(\d+)\n').search(res).groups()[0]
-        mcolumns = re.compile(r'mcolumns:(\d+)\n').search(res).groups()[0]
-        mrows, mcolumns = int(mrows), int(mcolumns)
+        mosaic = parse_mosaic_file(d)
+        mrows, mcolumns = int(mosaic['mrows']), int(mosaic['mcolumns'])
         fovs = mrows * mcolumns
         files = sorted(list(d.glob('*.tif')))
         files_ch1 = sorted(list(d.glob('*_01.tif')))
@@ -168,6 +167,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
         wait(fut)
 
     # Write metadata
+    # TODO: Write contents of mosaic file here as well
     z.attrs['sections'] = len(dirs)  # TODO: Read from mosaic file
     z.attrs['fovs'] = fovs
     z.attrs['mrows'] = mrows

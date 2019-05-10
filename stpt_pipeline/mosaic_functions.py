@@ -1,4 +1,6 @@
 from os import listdir
+from pathlib import Path
+from typing import Dict
 
 import dask.array as da
 import numpy as np
@@ -109,6 +111,25 @@ def get_mosaic_file(root_dir):
             return this_file
     #
     return ''
+
+
+def parse_mosaic_file(root_dir: Path) -> Dict[str, str]:
+    """Return contents of mosaic file as dictionary.
+
+    Parameters
+    ----------
+    root_dir
+        Directory containing mosaic file
+
+    Returns
+    -------
+    dictionary of key, values with mosaic file contents
+    """
+    mosaic_file = get_mosaic_file(root_dir)
+    with open(mosaic_file) as fh:
+        items = [item.strip().split(':', 1) for item in fh.readlines()]
+        res = {k[0]: k[1] for k in items}
+        return res
 
 
 def get_img_cube(
