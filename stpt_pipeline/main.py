@@ -2,7 +2,6 @@ import logging
 from os import listdir
 from pathlib import Path
 
-import dask.array as da
 import numpy as np
 from dask import delayed  # noqa: F401
 from distributed import Client, wait
@@ -10,67 +9,10 @@ from scipy.ndimage import geometric_transform
 
 from .chi_functions import find_overlap_conf, read_mosaicifile_stpt
 from .mosaic_functions import find_delta, get_img_cube, get_img_list, get_mosaic_file
+from .preprocess import preprocess
 from .settings import Settings
-from .stpt_displacement import defringe, get_coords, magic_function
 
 log = logging.getLogger('owl.daemon.pipeline')
-
-
-def read_flatfield(flat_file: Path):
-    """[summary]
-
-    Parameters
-    ----------
-    flat_file : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    log.info('Reading flatfield %s', flat_file)
-    if Settings.do_flat:
-        fl = np.load(flat_file)
-        channel = Settings.channel_to_use - 1
-        flat = fl[:, :, channel]
-        if Settings.do_defringe:
-            fr_img = defringe(flat)
-            nflat = (flat - fr_img) / np.median(flat)
-        else:
-            nflat = flat / np.median(flat)
-        nflat[nflat < 0.5] = 1.0
-    else:
-        nflat = 1.0
-    return nflat
-
-
-def list_directories(root_dir: Path):
-    """[summary]
-
-    This lists all the subdirectories. Once there is an
-    standarized naming convention this will have to be edited,
-    as at the moment looks for dir names with the '4t1' string
-    on them, as all the experiments had this
-
-    Parameters
-    ----------
-    root_dir : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    dirs = []
-    for this_file in listdir(root_dir):
-        if this_file.find('4t1') > -1:
-            if this_file.find('.txt') > -1:
-                continue
-            dirs.append(root_dir / this_file)
-    dirs.sort()
-    return dirs
 
 
 def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
@@ -85,13 +27,14 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
     output_dir : Path
         [description]
     """
-    client = Client.current()
+    #  client = Client.current()
+    z = preprocess(root_dir, flat_file, output_dir)
+    sections = z.attrs['sections']
+    for section in range(sections):
+        log.info('Processing section %s', section)
 
-    nflat = delayed(read_flatfield)(flat_file)
 
-    log.info('Getting directory listing %s', root_dir)
-    dirs = list_directories(root_dir)
-
+"""
     for this_dir in dirs:
         log.info('Processing directory %s', this_dir)
         # read mosaic file, get delta in microns
@@ -154,6 +97,8 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
         dx_mat = np.zeros((len(dx), len(dx))) - 9999
         dy_mat = np.zeros((len(dx), len(dx))) - 9999
         #
+        results = []
+        data_desc = []
         for i in range(len(dx0)):
             #
             # This is more or less the distance between images in detectors,
@@ -164,8 +109,6 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
             r[i] = 100
             i_t = np.where(r <= 1)[0]
             #
-            results = []
-            data_desc = []
             for this_img in i_t:
                 if dx_mat[i, this_img] != -9999:
                     # already done
@@ -236,28 +179,33 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path):
                 results.append(res)
                 data_desc.append([ORIENTATION, ind_ref, ind_obj])
 
-            futures = client.compute(results)
-            wait(futures)
-            for dd, fut in zip(data_desc, futures):
-                dx, dy, mer = fut.result()
-                ORIENTATION, ind_ref, ind_obj = dd
-                log.info('%s %s', dx, dy)
+            if len(results) > 5:
+                futures = client.compute(results)
+                wait(futures)
+                for dd, fut in zip(data_desc, futures):
+                    dx, dy, mer = fut.result()
+                    ORIENTATION, ind_ref, ind_obj = dd
+                    log.info('%s %s', dx, dy)
 
-                if ORIENTATION == 'Y':
-                    dx_mat[ind_ref, ind_obj] = dx
-                    dy_mat[ind_ref, ind_obj] = dy
-                    #
-                    dx_mat[ind_obj, ind_ref] = -dx
-                    dy_mat[ind_obj, ind_ref] = -dy
-                if ORIENTATION == 'X':
-                    dx_mat[ind_ref, ind_obj] = dy
-                    dy_mat[ind_ref, ind_obj] = -dx
-                    #
-                    dx_mat[ind_obj, ind_ref] = -dy
-                    dy_mat[ind_obj, ind_ref] = dx
+                    if ORIENTATION == 'Y':
+                        dx_mat[ind_ref, ind_obj] = dx
+                        dy_mat[ind_ref, ind_obj] = dy
+                        #
+                        dx_mat[ind_obj, ind_ref] = -dx
+                        dy_mat[ind_obj, ind_ref] = -dy
+                    if ORIENTATION == 'X':
+                        dx_mat[ind_ref, ind_obj] = dy
+                        dy_mat[ind_ref, ind_obj] = -dx
+                        #
+                        dx_mat[ind_obj, ind_ref] = -dy
+                        dy_mat[ind_obj, ind_ref] = dx
 
-        out = output_dir / this_dir.name
-        out.mkdir(exist_ok=True)
-        log.debug('Saving results to %s', out)
-        np.save(out / 'desp_dist_x', dx_mat)
-        np.save(out / 'desp_dist_y', dy_mat)
+                results, data_desc = [], []
+
+                out = output_dir / this_dir.name
+                out.mkdir(exist_ok=True)
+                log.debug('Saving results to %s', out)
+                np.save(out / 'desp_dist_x', dx_mat)
+                np.save(out / 'desp_dist_y', dy_mat)
+
+"""
