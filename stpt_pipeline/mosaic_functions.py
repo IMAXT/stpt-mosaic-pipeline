@@ -1,3 +1,4 @@
+from collections import defaultdict
 from os import listdir
 from pathlib import Path
 from typing import Dict
@@ -113,6 +114,21 @@ def get_mosaic_file(root_dir):
     return ''
 
 
+class MosaicDict(defaultdict):
+    def __init__(self):
+        super().__init__()
+        self.default_factory = list
+
+    def update(self, item):
+        key, val = list(item.items())[0]
+        if 'XPos' in key:
+            self['XPos'].append(int(val))
+        elif 'YPos' in key:
+            self['YPos'].append(int(val))
+        else:
+            super().update(item)
+
+
 def parse_mosaic_file(root_dir: Path) -> Dict[str, str]:
     """Return contents of mosaic file as dictionary.
 
@@ -126,9 +142,10 @@ def parse_mosaic_file(root_dir: Path) -> Dict[str, str]:
     dictionary of key, values with mosaic file contents
     """
     mosaic_file = get_mosaic_file(root_dir)
-    with open(mosaic_file) as fh:
+    with open(root_dir / mosaic_file) as fh:
         items = [item.strip().split(':', 1) for item in fh.readlines()]
-        res = {k[0]: k[1] for k in items}
+        res = MosaicDict()
+        [res.update({k[0]: k[1]}) for k in items]
         return res
 
 
