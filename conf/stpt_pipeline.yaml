@@ -2,14 +2,17 @@
 version: 1
 
 # Name of the pipeline
+extra_pip_packages: stpt-pipeline
 name: stpt
 
 # Pipeline arguments
-datalen: 100
+root_dir: /data/meds1_b/imaxt_data/stpt/20190201/20190201_tumour_opticalsections_extraoverlap
+output_dir: /data/meds1_a/eglez/imaxt/stpt
+flat_file: /data/meds1_a/cgonzal/imaxt/stpt_desp_final/flat2.npy
 
 # Resources requested
 resources:
-  threads: 24
-  workers: 1
-  memory: 2G
+  threads: 1
+  workers: 50
+  memory: 12G
 
