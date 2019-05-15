@@ -29,7 +29,7 @@ def med_box(y, half_box=2):
             i_min if i_min + 2 * half_box <= len(y) - 1 else len(y) - 1 - 2 * half_box
         )
         ym.append(np.median(y[i_min:i_min + 2 * half_box]))
-    #
+
     return np.array(ym)
 
 
@@ -54,9 +54,9 @@ def defringe(img):
             t = np.median(img[:, -10:], 1)
         else:
             t = np.median(img[:, i - 5:i + 5], 1)
-        #
+
         fr_img[:, i] = img[:, i] - med_box(t, 5)
-    #
+
     return fr_img
 
 

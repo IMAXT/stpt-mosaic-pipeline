@@ -1,12 +1,11 @@
 import logging
 
 import numpy as np
-from scipy.signal import medfilt2d
 
 log = logging.getLogger('owl.daemon.pipeline')
 
 
-def MAD(x):
+def mad(x):
     """[summary]
 
     Parameters
@@ -22,73 +21,11 @@ def MAD(x):
     return np.median(np.abs(x - np.median(x)))
 
 
-def read_mosaicifile_stpt(filename):
-    """[summary]
-
-    Parameters
-    ----------
-    filename : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    #
-    # Reads the mosaic.txt file that sets up the stage and
-    # returns the expected positions in microns
-    #
-    file_p = open(filename, 'r')
-    #  delta_x/_y are the positions in microns,
-    # label_x/_y are the names of each position,
-    # that normally indicate the column/row position
-    # but are not used later
-    delta_x = []
-    label_x = []
-    delta_y = []
-    label_y = []
-    for this_line in file_p.readlines():
-        if this_line.find('XPos') > -1:
-            temp = this_line.split(':')
-            delta_x.append(float(temp[1]))
-            label_x.append(temp[0])
-        if this_line.find('YPos') > -1:
-            temp = this_line.split(':')
-            delta_y.append(float(temp[1]))
-            label_y.append(temp[0])
-    #
-    file_p.close()
-    #
-    return np.array(delta_x), np.array(delta_y), np.array(label_x), np.array(label_y)
-
-
 def prepare_image_conf(
-    img, conf, ORIENTATION='X', apply_filter=False, DOUBLE_MEDIAN=False, IMG_STD=-1
+    img, conf, orientation, img_std=-1
 ):
     """[summary]
 
-    Parameters
-    ----------
-    img : [type]
-        [description]
-    conf : [type]
-        [description]
-    ORIENTATION : str, optional
-        [description], by default 'X'
-    apply_filter : bool, optional
-        [description], by default False
-    DOUBLE_MEDIAN : bool, optional
-        [description], by default False
-    IMG_STD : int, optional
-        [description], by default -1
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    #
     # Generates properly aligned images, as the crossmatching code works
     # assuming a fixed relative orientation of the images.
     #
@@ -96,37 +33,44 @@ def prepare_image_conf(
     # used in the crossmatching plus a confidence map. If apply_filter
     # is switched on, a median substracted image (either 1D or 2D median)
     # is returned as fimg_filt, otherwise a copy of the original image
-    #
+
+    Parameters
+    ----------
+    img : [type]
+        [description]
+    conf : [type]
+        [description]
+    orientation : str
+        [description]
+    img_std : int, optional
+        [description], by default -1
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
     N_SIGMA_CLIP = 1.5
-    #
-    if ORIENTATION == 'X':
+
+    if orientation == 'x':
         img_fin = np.rot90(img, 1)
         conf_fin = np.rot90(conf, 1)
     else:
         img_fin = img.copy()
         conf_fin = conf.copy()
-    #
-    if apply_filter:
-        if DOUBLE_MEDIAN:
-            img_filt = img_fin - 0.5 * (
-                medfilt2d(img_fin, (51, 1)) + medfilt2d(img_fin, (1, 51))
-            )
-        else:
-            img_filt = img_fin - medfilt2d(img_fin, (51, 1))
-    else:
-        img_filt = img_fin.copy()
-    #
+
+    img_filt = img_fin.copy()
+
     mask_fin = np.ones_like(img_fin)
-    #
+
     # if STD=-1 the std for the confidence mask is computed over the image,
     # otherwise the valued passed as STD is used. By default the code uses
     # a STD computed over the whole cube, that is mucho more robust that
     # local estimations
-    #
-    if IMG_STD == -1:
-        mask_fin[np.abs(img_filt) <= N_SIGMA_CLIP * 1.48 * MAD(img_filt)] = 0.0
+    if img_std == -1:
+        mask_fin[np.abs(img_filt) <= N_SIGMA_CLIP * 1.48 * mad(img_filt)] = 0.0
     else:
-        mask_fin[img_fin <= IMG_STD] = 0.0
+        mask_fin[img_fin <= img_std] = 0.0
     # input conf map
     mask_fin[conf_fin < 0.7] = 0.0
     #
@@ -138,15 +82,15 @@ def find_overlap_conf(
     conf_ref,
     img_obj,
     conf_obj,
-    ORIENTATION='X',
-    produce_image=False,
+    orientation,
     blind_start=True,
     init_desp=None,
-    DOUBLE_MEDIAN=False,
-    return_chi=False,
-    IMG_STD=-1,
-):
+    img_std=-1,
+):  # TODO: Function too complex
     """[summary]
+
+    This calculates the displacementes that minimize the squared difference
+    between images.
 
     Parameters
     ----------
@@ -158,19 +102,13 @@ def find_overlap_conf(
         [description]
     conf_obj : [type]
         [description]
-    ORIENTATION : str, optional
-        [description], by default 'X'
-    produce_image : bool, optional
-        [description], by default False
+    orientation : str
+        [description]
     blind_start : bool, optional
         [description], by default True
     init_desp : list, optional
         [description], by default [-50, 1858]
-    DOUBLE_MEDIAN : bool, optional
-        [description], by default False
-    return_chi : bool, optional
-        [description], by default False
-    IMG_STD : int, optional
+    img_std : int, optional
         [description], by default -1
 
     Returns
@@ -178,20 +116,16 @@ def find_overlap_conf(
     [type]
         [description]
     """
-    #
-    # This calculates the displacementes that minimize the squared difference
-    # between images.
-    #
+    assert orientation is not None, 'orientation cannot be None'
+
     REFINE_CHI = True
-    #
     STEPS = 30  # The chi surface will be of STEPSxSTEPS size
-    #
+
     # DELTA is the step that dx and dy are increased at each
     # point of the evaliations of chi.
     #
     # If an initial estimate is provided, the (dx,dy) space
     # of possible displacements to explore is narrower
-    #
     if blind_start:
         DELTA = [16, 8, 1]
     else:
@@ -200,42 +134,32 @@ def find_overlap_conf(
             init_desp = [-50, 1858]
         dx = init_desp[0]
         dy = init_desp[1]
-    #
+
     # By default the code assumes that img0 is the reference image and that
     # img1 is aligned along the X direction (in the python matrix coordinate
     # frame). If this is not the case, ORIENTATION is set to Y and the images
     # rotated inside prepare_image
-    #
     img0, img0_filt, mask0 = prepare_image_conf(
         img_ref,
         conf_ref,
-        apply_filter=False,
-        ORIENTATION=ORIENTATION,
-        DOUBLE_MEDIAN=DOUBLE_MEDIAN,
-        IMG_STD=IMG_STD,
+        orientation,
+        img_std=img_std,
     )
     img1, img1_filt, mask1 = prepare_image_conf(
         img_obj,
         conf_obj,
-        apply_filter=False,
-        ORIENTATION=ORIENTATION,
-        DOUBLE_MEDIAN=DOUBLE_MEDIAN,
-        IMG_STD=IMG_STD,
+        orientation,
+        img_std=img_std,
     )
     DET_SIZE = img0.shape[1]
-    #
-    #
     for i_delta in range(len(DELTA)):
-        log.info('Iteration %d', i_delta + 1)
         # the first iteration sets up the displacements to be
         # evaluated
         if (i_delta == 0) & blind_start:
-            #
             # add 10 so that at least there are 10px to compare overlap
             #  desp_large runs along the direction where the displacement is
             # the largest, so typically will have values between 1700 and 2100,
             # while desp_short runs in the other, and moves between -200 and 200.
-            #
             desp_large = DET_SIZE - 10 - np.arange(STEPS + 1) * DELTA[i_delta] - 1.0
             desp_short = (
                 np.arange(STEPS + 1) * DELTA[i_delta]
@@ -254,7 +178,7 @@ def find_overlap_conf(
                 delta_cor = (STEPS - 1) * DELTA[i_delta] * 0.5 + dy - DET_SIZE
             else:
                 delta_cor = 0
-            #
+
             desp_large = (
                 np.arange(STEPS) * DELTA[i_delta]
                 - (STEPS - 1) * DELTA[i_delta] * 0.5
@@ -265,69 +189,62 @@ def find_overlap_conf(
         # cast as ints.
         desp_y = desp_large.astype(int)
         desp_x = desp_short.astype(int)
-        #
+
         chi = np.zeros((len(desp_x), len(desp_y)))
         npx = np.ones((len(desp_x), len(desp_y)))
-        for i in range(len(desp_y)):
+        for i, dy in enumerate(desp_y):
             # a slice of the reference image
-            t_ref = img0[:, desp_y[i]:]
-            err_ref = np.sqrt(img0[:, desp_y[i]:])  #  assuming poisson errors
-            mask_ref = mask0[:, desp_y[i]:]
+            t_ref = img0[:, dy:]
+            err_ref = np.sqrt(img0[:, dy:])  #  assuming poisson errors
+            mask_ref = mask0[:, dy:]
             # same for the other image
-            t1 = img1[:, 0: -desp_y[i]]
-            maskt = mask1[:, 0: -desp_y[i]]
-            err_1 = np.sqrt(img1[:, 0: -desp_y[i]])
-            #
-            for j in range(len(desp_x)):
-                if desp_x[j] < 0:
+            t1 = img1[:, 0: -dy]
+            maskt = mask1[:, 0: -dy]
+            err_1 = np.sqrt(img1[:, 0: -dy])
+
+            for j, dx in enumerate(desp_x):
+                if dx < 0:
                     # this is the difference of the overlap of the reference image
                     # and the displaced image. Depending on whether the small displacemente
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[np.abs(desp_x[j]):, ] * maskt[np.abs(desp_x[j]):, :]
-                        - t_ref[0:desp_x[j], ] * mask_ref[0:desp_x[j], :]
+                        t1[abs(dx):, ] * maskt[abs(dx):, :]
+                        - t_ref[0:dx, ] * mask_ref[0:dx, :]
                     )
                     #  combined mask
                     mask_final = (
-                        maskt[np.abs(desp_x[j]):, :] + mask_ref[0:desp_x[j], :]
+                        maskt[abs(dx):, :] + mask_ref[0:dx, :]
                     )
                     # and erros added in cuadrature
                     div_t = np.sqrt(
-                        err_ref[0:desp_x[j], :] ** 2
-                        + err_1[np.abs(desp_x[j]):, ] ** 2
+                        err_ref[0:dx, :] ** 2
+                        + err_1[abs(dx):, ] ** 2
                     )
-                    #
-                elif desp_x[j] == 0:
-                    #
+                elif dx == 0:
                     temp = t1 * maskt - t_ref * mask_ref
-                    #
                     div_t = np.sqrt(err_ref ** 2 + err_1 ** 2)
-                    #
                     mask_final = maskt + mask_ref
                 else:
-                    #
                     temp = (
-                        t1[0: -desp_x[j], ] * maskt[0: -desp_x[j], ]
-                        - t_ref[desp_x[j]:, ] * mask_ref[desp_x[j]:, ]
+                        t1[0: -dx, ] * maskt[0: -dx, ]
+                        - t_ref[dx:, ] * mask_ref[dx:, ]
                     )
-                    #
-                    mask_final = maskt[0: -desp_x[j], ] + mask_ref[desp_x[j]:, ]
-                    #
+
+                    mask_final = maskt[0: -dx, ] + mask_ref[dx:, ]
+
                     div_t = np.sqrt(
-                        err_ref[np.abs(desp_x[j]):, ] ** 2 + err_1[0: -desp_x[j], ] ** 2
+                        err_ref[np.abs(dx):, ] ** 2 + err_1[0: -dx, ] ** 2
                     )
-                    #
                 # if there are not enough good pixels we set chi to 10e7
                 if mask_final.sum() > 0:
                     chi[j, i] = np.mean(
                         (temp[mask_final > 0] / div_t[mask_final > 0]) ** 2
                     )
-                    #
                     npx[j, i] = np.sum(mask_final)
                 else:
                     chi[j, i] = 1e7
-        #
+
         if REFINE_CHI:
             # this generates an estimation of the "background" of the chi surface,
             # that sometimes is heplful, mostly for cosmetic reasons, to have a flat
@@ -336,92 +253,17 @@ def find_overlap_conf(
                 chi.shape
             )
             chi -= temp_bg0
-        #
         #  now finfing the minimum
         i_x, i_y = np.where(chi == chi.min())
-        #
         try:
             # in case of many nans, this fails, default to middle
             dx = desp_x[i_x][0]
             dy = desp_y[i_y][0]
         except IndexError:
-            dx = int(np.median(desp_x))
-            dy = int(np.median(desp_y))
-        #
-        log.info('Found min at dx=%d, dy=%d', dx, dy)
-    #
-    # now on to generate the relevant outputs
-    #
-    if produce_image:
-        #
-        # This produces a mosaiced image, good to check
-        # if the procedure worked properly, but takes time.
-        #
-        big_picture, overlap = overlap_images(img0, img1, dx, dy)
-        #
-        if return_chi:
-            return dx, dy, big_picture, overlap, chi
-        else:
-            return dx, dy, big_picture, overlap
-    else:
-        if return_chi:
-            return dx, dy, chi
-        else:
-            return dx, dy
+            dx = np.median(desp_x)
+            dy = np.median(desp_y)
 
+    if orientation == 'y':
+        dx, dy = dy, dx
 
-def overlap_images(img0, img1, dx, dy):
-    """[summary]
-
-    Parameters
-    ----------
-    img0 : [type]
-        [description]
-    img1 : [type]
-        [description]
-    dx : [type]
-        [description]
-    dy : [type]
-        [description]
-
-    Returns
-    -------
-    [type]
-        [description]
-    """
-    #
-    # Produces a mosaiced image displacing img1
-    # by dx,dy and overlapping it to img0. The
-    # displacements are cast to integers, so therefore
-    # there is no interpolation.
-    #
-    # big_picture is the actual added pixels of both images,
-    # and overlap keeps track of how many real pixels went into
-    # each of the pixels of big_picture
-    #
-    dx = int(dx)
-    dy = int(dy)
-    big_picture = np.zeros((img0.shape[0] + np.abs(dx), img0.shape[1] + np.abs(dy)))
-    if dx < 0:
-        delta_x = np.abs(dx)
-    else:
-        delta_x = 0
-    if dy < 0:
-        delta_y = np.abs(dy)
-    else:
-        delta_y = 0
-    overlap = np.zeros_like(big_picture)
-    big_picture[
-        delta_x:delta_x + img0.shape[0], delta_y:delta_y + img0.shape[1]
-    ] = img0
-    overlap[delta_x:delta_x + img0.shape[0], delta_y:delta_y + img0.shape[1]] += 1
-    big_picture[
-        delta_x + dx:delta_x + img0.shape[0] + dx,
-        delta_y + dy:delta_y + dy + img0.shape[1],
-    ] += img1
-    overlap[
-        delta_x + dx:delta_x + img0.shape[0] + dx,
-        delta_y + dy:delta_y + dy + img0.shape[1],
-    ] += 1
-    #
-    return big_picture, overlap
+    return int(dx), int(dy)

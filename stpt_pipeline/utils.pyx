@@ -1,5 +1,6 @@
 from libc.math cimport abs
 
+
 def get_coords(tuple coords, tuple cof, float center_x, float max_x):
     """[summary]
 
@@ -34,4 +35,3 @@ def get_coords(tuple coords, tuple cof, float center_x, float max_x):
     r0 = center_x + sign * (xi + dy_cof * xi ** 2)
     res = (r0, c1)
     return res
-    
