@@ -263,7 +263,7 @@ def find_overlap_conf(
             dx = np.median(desp_x)
             dy = np.median(desp_y)
 
-    if orientation == 'y':
-        dx, dy = dy, dx
+    if orientation == 'x':
+        dx, dy = dy, -dx
 
     return int(dx), int(dy)
