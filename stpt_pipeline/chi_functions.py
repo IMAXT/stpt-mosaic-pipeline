@@ -21,9 +21,7 @@ def mad(x):
     return np.median(np.abs(x - np.median(x)))
 
 
-def prepare_image_conf(
-    img, conf, orientation, img_std=-1
-):
+def prepare_image_conf(img, conf, orientation, img_std=-1):
     """[summary]
 
     # Generates properly aligned images, as the crossmatching code works
@@ -140,16 +138,10 @@ def find_overlap_conf(
     # frame). If this is not the case, ORIENTATION is set to Y and the images
     # rotated inside prepare_image
     img0, img0_filt, mask0 = prepare_image_conf(
-        img_ref,
-        conf_ref,
-        orientation,
-        img_std=img_std,
+        img_ref, conf_ref, orientation, img_std=img_std
     )
     img1, img1_filt, mask1 = prepare_image_conf(
-        img_obj,
-        conf_obj,
-        orientation,
-        img_std=img_std,
+        img_obj, conf_obj, orientation, img_std=img_std
     )
     DET_SIZE = img0.shape[1]
     for i_delta in range(len(DELTA)):
@@ -198,9 +190,9 @@ def find_overlap_conf(
             err_ref = np.sqrt(img0[:, dy:])  #  assuming poisson errors
             mask_ref = mask0[:, dy:]
             # same for the other image
-            t1 = img1[:, 0: -dy]
-            maskt = mask1[:, 0: -dy]
-            err_1 = np.sqrt(img1[:, 0: -dy])
+            t1 = img1[:, 0:-dy]
+            maskt = mask1[:, 0:-dy]
+            err_1 = np.sqrt(img1[:, 0:-dy])
 
             for j, dx in enumerate(desp_x):
                 if dx < 0:
@@ -209,33 +201,23 @@ def find_overlap_conf(
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[abs(dx):, ] * maskt[abs(dx):, :]
-                        - t_ref[0:dx, ] * mask_ref[0:dx, :]
+                        t1[abs(dx) :,] * maskt[abs(dx) :, :]
+                        - t_ref[0:dx,] * mask_ref[0:dx, :]
                     )
                     #  combined mask
-                    mask_final = (
-                        maskt[abs(dx):, :] + mask_ref[0:dx, :]
-                    )
+                    mask_final = maskt[abs(dx) :, :] + mask_ref[0:dx, :]
                     # and erros added in cuadrature
-                    div_t = np.sqrt(
-                        err_ref[0:dx, :] ** 2
-                        + err_1[abs(dx):, ] ** 2
-                    )
+                    div_t = np.sqrt(err_ref[0:dx, :] ** 2 + err_1[abs(dx) :,] ** 2)
                 elif dx == 0:
                     temp = t1 * maskt - t_ref * mask_ref
                     div_t = np.sqrt(err_ref ** 2 + err_1 ** 2)
                     mask_final = maskt + mask_ref
                 else:
-                    temp = (
-                        t1[0: -dx, ] * maskt[0: -dx, ]
-                        - t_ref[dx:, ] * mask_ref[dx:, ]
-                    )
+                    temp = t1[0:-dx,] * maskt[0:-dx,] - t_ref[dx:,] * mask_ref[dx:,]
 
-                    mask_final = maskt[0: -dx, ] + mask_ref[dx:, ]
+                    mask_final = maskt[0:-dx,] + mask_ref[dx:,]
 
-                    div_t = np.sqrt(
-                        err_ref[np.abs(dx):, ] ** 2 + err_1[0: -dx, ] ** 2
-                    )
+                    div_t = np.sqrt(err_ref[np.abs(dx) :,] ** 2 + err_1[0:-dx,] ** 2)
                 # if there are not enough good pixels we set chi to 10e7
                 if mask_final.sum() > 0:
                     chi[j, i] = np.mean(

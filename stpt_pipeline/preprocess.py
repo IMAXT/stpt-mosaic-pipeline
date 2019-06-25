@@ -38,6 +38,7 @@ def retry(exceptions, tries=4, delay=3, backoff=2):
         Backoff multiplier (e.g. value of 2 will double the delay
         each retry).
     """
+
     def deco_retry(f):
         @wraps(f)
         def f_retry(*args, **kwargs):
@@ -262,6 +263,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
 
         client = Client.current()
         fut = client.compute(res)
+        # TODO: check that the futures finish ok
         wait(fut)
         z[f'section={section}'].attrs.update(mosaic)
         z[f'section={section}'].attrs['fovs'] = fovs
