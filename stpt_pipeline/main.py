@@ -67,6 +67,7 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path) -> None:
                 if i > this_img:
                     continue
 
+                flag = False
                 if np.abs(dx0[i] - dx0[this_img]) > np.abs(dy0[i] - dy0[this_img]):
                     orientation = 'x'
                     if dx0[i] > dx0[this_img]:
@@ -81,16 +82,24 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path) -> None:
                 im_obj = da.from_zarr(img_cube[this_img])
 
                 if flag:
-                    im_ref, im_obj = im_obj, im_ref
+                    res = delayed(find_overlap_conf)(
+                        im_obj,
+                        dist_conf,
+                        im_ref,
+                        dist_conf,
+                        orientation,
+                        img_std=img_cube_mean_std,
+                    )
+                else:
+                    res = delayed(find_overlap_conf)(
+                        im_ref,
+                        dist_conf,
+                        im_obj,
+                        dist_conf,
+                        orientation,
+                        img_std=img_cube_mean_std,
+                    )
 
-                res = delayed(find_overlap_conf)(
-                    im_ref,
-                    dist_conf,
-                    im_obj,
-                    dist_conf,
-                    orientation,
-                    img_std=img_cube_mean_std,
-                )
                 results.append(_sink(i, this_img, res))
 
         futures = client.compute(results)
