@@ -33,11 +33,13 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path) -> None:
     client = Client.current()
     z = preprocess(root_dir, flat_file, output_dir)
 
+    # convert to find_shifts
     for name, section in z.groups():
         results = []
         log.info('Processing section %s', name)
         img_cube = [
-            section[f'fov={i}/z=0/channel=04/geom'] for i in range(section.attrs['fovs'])
+            section[f'fov={i}/z=0/channel=04/geom']
+            for i in range(section.attrs['fovs'])
         ]
         img_cube_stack = da.stack(img_cube)
         img_cube_std = da.std(img_cube_stack, axis=0)
@@ -56,9 +58,10 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path) -> None:
             i_t = np.where(r == 1)[0].tolist()
 
             im_ref = da.from_zarr(img)
-            # Calculate confidence map.
-            dist_conf = da.ones_like(im_ref)
-            dist_conf = delayed(apply_geometric_transform)(dist_conf, None)
+            # Calculate confidence map. Only needs to be done once.
+            if i == 0:
+                dist_conf = da.ones_like(im_ref)
+                dist_conf = delayed(apply_geometric_transform)(dist_conf, None)
 
             for this_img in i_t:
                 if i > this_img:
@@ -66,12 +69,19 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path) -> None:
 
                 if np.abs(dx0[i] - dx0[this_img]) > np.abs(dy0[i] - dy0[this_img]):
                     orientation = 'x'
+                    if dx0[i] > dx0[this_img]:
+                        flag = True
                 else:
                     orientation = 'y'
+                    if dy0[i] > dy0[this_img]:
+                        flag = True
 
                 log.info('Finding shifts for (%d, %d) %s', i, this_img, orientation)
 
                 im_obj = da.from_zarr(img_cube[this_img])
+
+                if flag:
+                    im_ref, im_obj = im_obj, im_ref
 
                 res = delayed(find_overlap_conf)(
                     im_ref,
