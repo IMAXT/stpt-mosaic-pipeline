@@ -1,7 +1,5 @@
 import logging
 import re
-import time
-from functools import wraps
 from os import listdir
 from pathlib import Path
 
@@ -203,12 +201,14 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
     log.info('Storing images in %s', out)
     z = zarr.open(out, mode='a')
 
+    groups = list(z.groups())
+
     dirs = list_directories(root_dir)
     for d in dirs:
         # TODO: All this should be metadata
         log.info('Preprocessing %s', d.name)
         section = re.compile(r'\d\d\d\d$').search(d.name).group()
-        if f'section={section}' in [name for name, group in z.groups()]:
+        if f'section={section}' in [name for name, group in groups]:
             log.info('Section %s already preprocessed. Skipping.', section)
             continue
         mosaic = parse_mosaic_file(d)
@@ -228,8 +228,10 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
 
         client = Client.current()
         fut = client.compute(res)
+        # TODO: check that the futures finish ok
         wait(fut)
         z[f'section={section}'].attrs.update(mosaic)
         z[f'section={section}'].attrs['fovs'] = fovs
 
+    z.attrs['sections'] = len(dirs)
     return z
