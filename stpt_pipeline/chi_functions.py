@@ -21,9 +21,7 @@ def mad(x):
     return np.median(np.abs(x - np.median(x)))
 
 
-def prepare_image_conf(
-    img, conf, orientation, img_std=-1
-):
+def prepare_image_conf(img, conf, orientation, img_std=-1):
     """[summary]
 
     # Generates properly aligned images, as the crossmatching code works
@@ -52,7 +50,7 @@ def prepare_image_conf(
     """
     N_SIGMA_CLIP = 1.5
 
-    if orientation == 'x':
+    if 'x' in orientation:
         img_fin = np.rot90(img, 1)
         conf_fin = np.rot90(conf, 1)
     else:
@@ -77,7 +75,7 @@ def prepare_image_conf(
     return img_fin, img_filt, mask_fin
 
 
-def find_overlap_conf(
+def find_overlap_conf(  # noqa
     img_ref,
     conf_ref,
     img_obj,
@@ -86,7 +84,7 @@ def find_overlap_conf(
     blind_start=True,
     init_desp=None,
     img_std=-1,
-):  # TODO: Function too complex
+):
     """[summary]
 
     This calculates the displacementes that minimize the squared difference
@@ -140,16 +138,10 @@ def find_overlap_conf(
     # frame). If this is not the case, ORIENTATION is set to Y and the images
     # rotated inside prepare_image
     img0, img0_filt, mask0 = prepare_image_conf(
-        img_ref,
-        conf_ref,
-        orientation,
-        img_std=img_std,
+        img_ref, conf_ref, orientation, img_std=img_std
     )
     img1, img1_filt, mask1 = prepare_image_conf(
-        img_obj,
-        conf_obj,
-        orientation,
-        img_std=img_std,
+        img_obj, conf_obj, orientation, img_std=img_std
     )
     DET_SIZE = img0.shape[1]
     for i_delta in range(len(DELTA)):
@@ -198,9 +190,9 @@ def find_overlap_conf(
             err_ref = np.sqrt(img0[:, dy:])  #  assuming poisson errors
             mask_ref = mask0[:, dy:]
             # same for the other image
-            t1 = img1[:, 0: -dy]
-            maskt = mask1[:, 0: -dy]
-            err_1 = np.sqrt(img1[:, 0: -dy])
+            t1 = img1[:, 0:-dy]
+            maskt = mask1[:, 0:-dy]
+            err_1 = np.sqrt(img1[:, 0:-dy])
 
             for j, dx in enumerate(desp_x):
                 if dx < 0:
@@ -209,17 +201,14 @@ def find_overlap_conf(
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[abs(dx):, ] * maskt[abs(dx):, :]
-                        - t_ref[0:dx, ] * mask_ref[0:dx, :]
+                        t1[abs(dx) :,] * maskt[abs(dx) :, :]  # noqa
+                        - t_ref[0:dx,] * mask_ref[0:dx, :]  # noqa
                     )
                     #  combined mask
-                    mask_final = (
-                        maskt[abs(dx):, :] + mask_ref[0:dx, :]
-                    )
+                    mask_final = maskt[abs(dx) :, :] + mask_ref[0:dx, :]  # noqa
                     # and erros added in cuadrature
                     div_t = np.sqrt(
-                        err_ref[0:dx, :] ** 2
-                        + err_1[abs(dx):, ] ** 2
+                        err_ref[0:dx, :] ** 2 + err_1[abs(dx) :,] ** 2  # noqa
                     )
                 elif dx == 0:
                     temp = t1 * maskt - t_ref * mask_ref
@@ -227,14 +216,14 @@ def find_overlap_conf(
                     mask_final = maskt + mask_ref
                 else:
                     temp = (
-                        t1[0: -dx, ] * maskt[0: -dx, ]
-                        - t_ref[dx:, ] * mask_ref[dx:, ]
-                    )
+                        t1[0:-dx,] * maskt[0:-dx,]  # noqa
+                        - t_ref[dx:,] * mask_ref[dx:,]  # noqa
+                    )  # noqa
 
-                    mask_final = maskt[0: -dx, ] + mask_ref[dx:, ]
+                    mask_final = maskt[0:-dx,] + mask_ref[dx:,]  # noqa
 
                     div_t = np.sqrt(
-                        err_ref[np.abs(dx):, ] ** 2 + err_1[0: -dx, ] ** 2
+                        err_ref[np.abs(dx) :,] ** 2 + err_1[0:-dx,] ** 2  # noqa
                     )
                 # if there are not enough good pixels we set chi to 10e7
                 if mask_final.sum() > 0:
@@ -263,7 +252,10 @@ def find_overlap_conf(
             dx = np.median(desp_x)
             dy = np.median(desp_y)
 
-    if orientation == 'y':
-        dx, dy = dy, dx
+    if 'x' in orientation:
+        dx, dy = dy, -dx
+
+    if '-' in orientation:
+        dx, dy = -dx, -dy
 
     return int(dx), int(dy)

@@ -1,8 +1,5 @@
-import numpy as np
-
-
 class Settings:
-    """[summary]
+    """Internal settings.
 
     x/y_min and max are the lower/upper boundaries of the useful section of the
     detector.
@@ -17,6 +14,7 @@ class Settings:
     the images themselves.
 
     """
+
     x_min = 2
     x_max = 2080
     y_min = 80
