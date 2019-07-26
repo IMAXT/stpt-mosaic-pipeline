@@ -16,46 +16,12 @@ from imaxt_image.image import TiffImage
 from stpt_pipeline.utils import get_coords
 
 from .mosaic_functions import parse_mosaic_file
+from .retry import retry
 from .settings import Settings
 from .stpt_displacement import defringe, magic_function
 
 log = logging.getLogger('owl.daemon.pipeline')
 blosc.use_threads = False  # TODO: Check if this makes it quicker or slower
-
-
-def retry(exceptions, tries=4, delay=3, backoff=2):
-    """Retry calling the decorated function using an exponential backoff.
-
-    Parameters
-    ----------
-    exceptions
-        The exception to check, May be a tuple of exceptions.
-    tries
-        Number of times to try (not retry) before giving up.
-    delay
-        Initial delay between retries in seconds.
-    backoff
-        Backoff multiplier (e.g. value of 2 will double the delay
-        each retry).
-    """
-    def deco_retry(f):
-        @wraps(f)
-        def f_retry(*args, **kwargs):
-            mtries, mdelay = tries, delay
-            while mtries > 1:
-                try:
-                    return f(*args, **kwargs)
-                except exceptions as e:
-                    msg = '{}, Retrying in {} seconds...'.format(e, mdelay)
-                    log.warning(msg)
-                    time.sleep(mdelay)
-                    mtries -= 1
-                    mdelay *= backoff
-            return f(*args, **kwargs)
-
-        return f_retry  # true decorator
-
-    return deco_retry
 
 
 def read_flatfield(flat_file: Path) -> np.ndarray:
