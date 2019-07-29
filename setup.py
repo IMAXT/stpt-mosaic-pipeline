@@ -1,6 +1,6 @@
 from Cython.Build import cythonize
-from setuptools.extension import Extension
 from setuptools import find_packages, setup
+from setuptools.extension import Extension
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -8,7 +8,15 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['dask', 'distributed', 'voluptuous']
+requirements = [
+    'dask',
+    'distributed',
+    'imaxt-image',
+    'zarr',
+    'numpy',
+    'scipy',
+    'voluptuous',
+]
 
 setup_requirements = ['pytest-runner', 'flake8']
 
@@ -34,7 +42,9 @@ setup(
     keywords='stpt_pipeline',
     name='stpt_pipeline',
     packages=find_packages(include=['stpt_pipeline']),
-    ext_modules=cythonize(Extension('stpt_pipeline.utils', ['stpt_pipeline/utils.pyx'])),
+    ext_modules=cythonize(
+        Extension('stpt_pipeline.utils', ['stpt_pipeline/utils.pyx'])
+    ),
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,
