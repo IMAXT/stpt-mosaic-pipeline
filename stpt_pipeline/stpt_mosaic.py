@@ -22,13 +22,14 @@ def _sink(*args):
 
 
 @retry(Exception)
-def _save_image(arr, group, path, imgtype='raw'):
+def _get_image(group, path, imgtype, shape):
     g = group.require_group(path)
     try:
-        g.create_dataset(imgtype, data=arr)
+        arr = g.create_dataset(imgtype, shape=shape, chunks=(250, 250))
     except ValueError:
-        g[imgtype] = arr
+        arr = g[imgtype]
     log.info('Image %s/%s created', g.path, imgtype)
+    return arr
 
 
 @delayed
@@ -40,9 +41,12 @@ def _mosaic(im_t, abs_pos, abs_err, out=None):
     y_size = int(np.max(abs_pos[:, 1]) - np.min(abs_pos[:, 1])) + shapes[1] + 1
     y_delta = np.min(abs_pos[:, 1])
 
-    big_picture = np.zeros((x_size, y_size))
-    overlap = np.zeros_like(big_picture)
-    pos_err = np.zeros_like(big_picture)
+    store = im_t[0].store
+    group = zarr.Group(store)
+
+    big_picture = _get_image(group, out, 'raw', (x_size, y_size))
+    overlap = _get_image(group, out, 'overlap', (x_size, y_size))
+    pos_err = _get_image(group, out, 'pos_err', (x_size, y_size))
 
     for i in range(len(im_t)):
         x0 = int(abs_pos[i, 0] - x_delta)
@@ -53,13 +57,6 @@ def _mosaic(im_t, abs_pos, abs_err, out=None):
         big_picture[xslice, yslice] += im_t[i][:]
         overlap[xslice, yslice] += 1
         pos_err[xslice, yslice] += abs_err[i]
-
-    if out:
-        store = im_t[0].store
-        g = zarr.Group(store)
-        _save_image(big_picture, g, out, 'raw')
-        _save_image(overlap, g, out, 'overlap')
-        _save_image(pos_err, g, out, 'pos_err')
 
     return out
 
