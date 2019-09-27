@@ -10,6 +10,7 @@ from distributed import Client, as_completed
 from .chi_functions import find_overlap_conf
 from .preprocess import apply_geometric_transform
 from .retry import retry
+from .settings import Settings
 
 log = logging.getLogger('owl.daemon.pipeline')
 
@@ -25,7 +26,7 @@ def _sink(*args):
 def _get_image(group, path, imgtype, shape):
     g = group.require_group(path)
     try:
-        arr = g.create_dataset(imgtype, shape=shape, chunks=(250, 250))
+        arr = g.create_dataset(imgtype, shape=shape, chunks=(250, 250), dtype='float32')
     except ValueError:
         arr = g[imgtype]
     log.info('Image %s/%s created', g.path, imgtype)
@@ -33,7 +34,7 @@ def _get_image(group, path, imgtype, shape):
 
 
 @delayed
-def _mosaic(im_t, abs_pos, abs_err, out=None):
+def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
     shapes = im_t[0].shape
     x_size = int(np.max(abs_pos[:, 0]) - np.min(abs_pos[:, 0])) + shapes[0] + 1
     x_delta = np.min(abs_pos[:, 0])
@@ -55,7 +56,7 @@ def _mosaic(im_t, abs_pos, abs_err, out=None):
         yslice = slice(y0, y0 + im_t[i].shape[1])
 
         big_picture[xslice, yslice] += im_t[i][:]
-        overlap[xslice, yslice] += 1
+        overlap[xslice, yslice] += conf[:]
         pos_err[xslice, yslice] += abs_err[i]
 
     return out
@@ -197,6 +198,13 @@ class Section:
 
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = da.ones_like(img_cube[0])
+        x_min, x_max = Settings.x_min, Settings.x_max
+        y_min, y_max = Settings.y_min, Settings.y_max
+
+        mask = np.zeros(dist_conf.shape)
+        mask[x_min:x_max, y_min:y_max] = 1
+        dmask = da.from_array(mask, chunks=mask.shape)
+        dist_conf = dist_conf * dmask
         dist_conf = delayed(apply_geometric_transform)(dist_conf, None)
 
         dx0, dy0 = self.find_grid()
@@ -242,6 +250,10 @@ class Section:
             )
 
         self._section.attrs['offsets'] = offsets
+        try:
+            self._section.create_dataset('conf', data=dist_conf.compute())
+        except ValueError:
+            self._section['conf'] = dist_conf.compute()
 
         del img_cube_mean_std
 
@@ -253,7 +265,7 @@ class Section:
 
         px = {f'{o[0]}:{o[1]}': o[2:] for o in offsets}
         mu = {
-            f'{o[0]}:{o[1]}': [dx[o[0]] - dx[o[1]], dy[o[0]] - dy[o[1]]]
+            f'{o[0]}:{o[1]}': [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]]
             for o in offsets
         }
 
@@ -286,13 +298,13 @@ class Section:
 
         self._px, self._mu = px, mu
 
+        log.debug('Scale %f %f', x_scale, y_scale)
+
         err_px = {}
         for key in mu:
-            x_diff = px[key][0] - mu[key][0] / x_scale
-            y_diff = px[key][1] - mu[key][1] / y_scale
+            y_diff = px[key][0] - mu[key][0] / y_scale
+            x_diff = px[key][1] - mu[key][1] / x_scale
             err_px[key] = np.sqrt(x_diff ** 2 + y_diff ** 2)
-
-        log.debug('Scale %f %f', x_scale, y_scale)
 
         return x_scale, y_scale, err_px
 
@@ -328,7 +340,7 @@ class Section:
 
                 # Now to calculate the final disp, we have to check
                 # if this has been measured more than once
-                temp_pos = np.zeros(2)
+                temp_pos = [0, 0]
                 temp_err = 0.0
                 n = 0.0
                 for ref_img in fixed_pos:
@@ -348,11 +360,11 @@ class Section:
                         else:
                             temp_pos[0] += (
                                 abs_pos[ref_img, 0]
-                                + self._mu[f'{ref_img}:{this_img}'][0] / x_scale
+                                + self._mu[f'{ref_img}:{this_img}'][0] / y_scale
                             )
                             temp_pos[1] += (
                                 abs_pos[ref_img, 1]
-                                + self._mu[f'{ref_img}:{this_img}'][1] / y_scale
+                                + self._mu[f'{ref_img}:{this_img}'][1] / x_scale
                             )
                             temp_err += 15.0 ** 2
 
@@ -366,6 +378,7 @@ class Section:
             if done == len(dx0):
                 break
 
+        self._section.attrs['abs_pos'] = abs_pos.tolist()
         return abs_pos, abs_err
 
     def stitch(self):
@@ -375,12 +388,14 @@ class Section:
 
         abs_pos, abs_err = self.compute_abspos()
 
+        conf = self._section['conf']
+
         results = []
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch + 1)
                 out = f'{self.path}/mosaic/z={sl}/channel={ch+1}'
-                res = _mosaic(im_t, abs_pos, abs_err, out=out)
+                res = _mosaic(im_t, conf, abs_pos, abs_err, out=out)
                 results.append(res)
 
         futures = client.compute(results)

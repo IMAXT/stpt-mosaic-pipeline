@@ -141,7 +141,7 @@ def apply_geometric_transform(d, flat):
     new = geometric_transform(
         cropped.astype('float32'),
         get_coords,
-        output_shape=shapes,
+        output_shape=cropped.shape,
         extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0] * 1.0),
         mode='constant',
         cval=0.0,

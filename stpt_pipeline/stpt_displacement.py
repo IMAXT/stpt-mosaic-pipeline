@@ -81,5 +81,8 @@ def magic_function(x, flat=1):  # TODO: Call this some other name
     x_min, x_max = Settings.x_min, Settings.x_max
     y_min, y_max = Settings.y_min, Settings.y_max
     norm_val = Settings.norm_val
-    res = np.flipud(x / flat)[x_min:x_max, y_min:y_max] / norm_val
+    res = np.flipud(x / flat) / norm_val
+    mask = np.zeros_like(res)
+    mask[x_min:x_max, y_min:y_max] = 1
+    res = res * mask
     return res
