@@ -173,6 +173,3 @@ texinfo_documents = [
     )
 ]
 
-
-def setup(app):
-    sphinx.apidoc.main(['-f', '-o', 'docs/source', 'stpt_pipeline'])

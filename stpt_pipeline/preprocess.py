@@ -1,12 +1,14 @@
 import logging
 import re
+import traceback
+from contextlib import suppress
 from os import listdir
 from pathlib import Path
 
 import numpy as np
 import zarr
 from dask import delayed
-from distributed import Client, wait
+from distributed import Client, as_completed
 from scipy.ndimage import geometric_transform
 from zarr import blosc
 
@@ -118,7 +120,7 @@ def save_image(filename, z, section, first_offset, fovs):
     return d
 
 
-def apply_geometric_transform(d, flat):
+def apply_geometric_transform(d, flat, cof_dist):
     """[summary]
 
     Parameters
@@ -133,16 +135,25 @@ def apply_geometric_transform(d, flat):
     [type]
         [description]
     """
-    shapes = (Settings.x_max - Settings.x_min, Settings.y_max - Settings.y_min)
+    import time
+
+    w = time.monotonic()
     if flat is not None:
         cropped = magic_function(d, flat=flat)
     else:
         cropped = d
+    w = time.monotonic()
     new = geometric_transform(
         cropped.astype('float32'),
         get_coords,
         output_shape=cropped.shape,
-        extra_arguments=(Settings.cof_dist, shapes[0] * 0.5, shapes[0] * 1.0),
+        extra_arguments=(
+            cof_dist['cof_x'],
+            cof_dist['cof_y'],
+            cof_dist['tan'],
+            Settings.normal_x,
+            Settings.normal_y,
+        ),
         mode='constant',
         cval=0.0,
         order=1,
@@ -151,7 +162,7 @@ def apply_geometric_transform(d, flat):
     return new
 
 
-def geom(d, flat=1):
+def geom(d, flat=1, cof_dist=None):
     """[summary]
 
     Parameters
@@ -166,7 +177,9 @@ def geom(d, flat=1):
     [type]
         [description]
     """
-    new = apply_geometric_transform(d[:], flat)
+    assert cof_dist is not None
+
+    new = apply_geometric_transform(d[:], flat, cof_dist)
 
     fh = zarr.group(store=d.store)
     path = d.path.replace('/raw', '')
@@ -204,7 +217,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
     groups = list(z.groups())
 
     dirs = list_directories(root_dir)
-    for d in dirs:
+    for d in dirs[:1]:
         # TODO: All this should be metadata
         log.info('Preprocessing %s', d.name)
         section = re.compile(r'\d\d\d\d$').search(d.name).group()
@@ -223,15 +236,32 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
         res = []
         for f in d.glob('*.tif'):
             r = delayed(save_image)(f, z, section, first_offset, fovs)
-            g = delayed(geom)(r, flat=nflat)
+            g = delayed(geom)(r, flat=nflat, cof_dist=Settings.cof_dist)
             res.append(g)
 
         client = Client.current()
-        fut = client.compute(res)
-        # TODO: check that the futures finish ok
-        wait(fut)
+        futures = client.compute(res)
+
+        for fut in as_completed(futures):
+            if not fut.exception():
+                log.info('%s', fut.result())
+            else:
+                log.error('%s', fut.exception())
+                tb = fut.traceback()
+                log.error(traceback.format_tb(tb))
+                # TODO: shall we raise the error here?
+
         z[f'section={section}'].attrs.update(mosaic)
         z[f'section={section}'].attrs['fovs'] = fovs
+
+    with suppress(UnboundLocalError):
+        conf = np.ones((int(mosaic['columns']), int(mosaic['rows'])))
+        conf = magic_function(conf)
+
+        dist_conf = apply_geometric_transform(conf, None, Settings.cof_dist)
+
+        z.create_dataset('conf', data=conf, chunks=False)
+        z.create_dataset('dist_conf', data=dist_conf, chunks=False)
 
     z.attrs['sections'] = len(dirs)
     return z

@@ -184,6 +184,9 @@ class Section:
                 orientation = f'-{orientation}'
         return orientation
 
+    def get_distconf(self):
+        return self._section['/dist_conf'][:]
+
     def find_offsets(self):
         """Calculate offsets between all pairs of overlapping images
         """
@@ -197,15 +200,7 @@ class Section:
         img_cube_mean_std = da.mean(img_cube_std).persist()
 
         # Calculate confidence map. Only needs to be done once per section
-        dist_conf = da.ones_like(img_cube[0])
-        x_min, x_max = Settings.x_min, Settings.x_max
-        y_min, y_max = Settings.y_min, Settings.y_max
-
-        mask = np.zeros(dist_conf.shape)
-        mask[x_min:x_max, y_min:y_max] = 1
-        dmask = da.from_array(mask, chunks=mask.shape)
-        dist_conf = dist_conf * dmask
-        dist_conf = delayed(apply_geometric_transform)(dist_conf, None)
+        dist_conf = self.get_distconf()
 
         dx0, dy0 = self.find_grid()
 
@@ -250,11 +245,6 @@ class Section:
             )
 
         self._section.attrs['offsets'] = offsets
-        try:
-            self._section.create_dataset('conf', data=dist_conf.compute())
-        except ValueError:
-            self._section['conf'] = dist_conf.compute()
-
         del img_cube_mean_std
 
     def compute_scale(self):
@@ -388,7 +378,7 @@ class Section:
 
         abs_pos, abs_err = self.compute_abspos()
 
-        conf = self._section['conf']
+        conf = self.get_distconf()
 
         results = []
         for sl in range(self.slices):

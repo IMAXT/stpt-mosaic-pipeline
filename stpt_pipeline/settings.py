@@ -23,4 +23,6 @@ class Settings:
     do_flat = True
     do_defringe = False
     channel_to_use = 4
-    cof_dist = (3.93716645e-05 / 2, -7.37696218e-02 / 2, 2.52457306e01 / 2)
+    cof_dist = None
+    normal_x = 1000
+    normal_y = 1000
