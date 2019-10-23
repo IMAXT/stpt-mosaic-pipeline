@@ -3,12 +3,12 @@ from typing import Tuple
 
 import dask.array as da
 import numpy as np
+import xarray as xr
 import zarr
 from dask import delayed
 from distributed import Client, as_completed
 
 from .chi_functions import find_overlap_conf
-from .preprocess import apply_geometric_transform
 from .retry import retry
 from .settings import Settings
 
@@ -71,17 +71,11 @@ class Section:
         Zarr group containing the section data
     """
 
-    def __init__(self, section: zarr.Group):
+    def __init__(self, section: xr.DataArray):
         self._section = section
 
     def __getitem__(self, attr):
         return self._section.attrs[attr]
-
-    @property
-    def path(self) -> str:
-        """Path of the section
-        """
-        return self._section.path
 
     def save_image(self, arr, group, imgtype='raw'):
         g = self._section.require_group(group)
@@ -95,7 +89,9 @@ class Section:
     def fovs(self) -> int:
         """Number of field of views.
         """
-        return self._section.attrs['fovs']
+        mrows = int(self._section.attrs['mrows'])
+        mcolumns = int(self._section.attrs['mcolumns'])
+        return mrows * mcolumns
 
     @property
     def channels(self) -> int:
@@ -112,12 +108,9 @@ class Section:
         fov = [*self._section.groups()][0][1]
         return len([*fov.groups()])
 
-    def get_img_section(self, offset: int, channel: int) -> zarr.Array:
-        img_cube = [
-            self._section[f'fov={i}/z={offset}/channel={channel:02d}/geom']
-            for i in range(self.fovs)
-        ]
-        return img_cube
+    def get_img_section(self, offset: int, channel: int) -> da.Array:
+        arr = self._section.sel(channel=channel, z=offset)
+        return da.from_array(arr)
 
     def find_grid(self) -> Tuple[np.ndarray]:
         """Find the mosaic grid
@@ -194,8 +187,8 @@ class Section:
         # convert to find_shifts
         results = []
         log.info('Processing section %s', self._section.name)
-        img_cube = self.get_img_section(0, 4)
-        img_cube_stack = da.stack(img_cube)
+        img_cube_stack = self.get_img_section(0, 3)
+        # TODO: Apply geometric transformation to stack
         img_cube_std = da.std(img_cube_stack, axis=0)
         img_cube_mean_std = da.mean(img_cube_std).persist()
 
@@ -204,11 +197,11 @@ class Section:
 
         dx0, dy0 = self.find_grid()
 
-        for i, img in enumerate(img_cube):
+        for i, img in enumerate(img_cube_stack):
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
             i_t = np.where(r == 1)[0].tolist()
 
-            im_ref = da.from_zarr(img)
+            im_ref = img
 
             for this_img in i_t:
                 if i > this_img:
@@ -218,7 +211,7 @@ class Section:
                     dx0[i], dy0[i], dx0[this_img], dy0[this_img]
                 )
 
-                im_obj = da.from_zarr(img_cube[this_img])
+                im_obj = da.from_zarr(img_cube_stack[this_img])
                 res = delayed(find_overlap_conf)(
                     im_ref,
                     dist_conf,
@@ -304,7 +297,7 @@ class Section:
         log.info('Processing section %s', self._section.name)
         x_scale, y_scale, err_px = self.compute_scale()
 
-        img_cube = self.get_img_section(0, 1)
+        img_cube = self.get_img_section(0, 3)
         img_cube_stack = da.stack(img_cube)
         # ref image is the one with the max integrated flux
         ref_img_assemble = img_cube_stack.sum(axis=(1, 2)).argmax()
@@ -403,13 +396,13 @@ class STPTMosaic:
         Zarr array containing the full STPT sample.
     """
 
-    def __init__(self, arr: zarr.Array):
-        self._arr = arr
+    def __init__(self, path):
+        self._ds = xr.open_zarr(path)
 
     def sections(self):
         """Sections generator
         """
-        n = self._arr.attrs['sections']
+        n = int(self._ds.attrs['sections'])
         for i in range(n):
-            section = self._arr[f'section={i+1:04d}']
+            section = self._ds[f'S{i+1:03d}']
             yield Section(section)
