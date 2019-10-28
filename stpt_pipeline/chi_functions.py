@@ -2,6 +2,12 @@ import logging
 
 import numpy as np
 
+from scipy.optimize import minimize
+
+from scipy.ndimage import gaussian_filter,shift
+
+from .settings import Settings
+
 log = logging.getLogger('owl.daemon.pipeline')
 
 
@@ -75,7 +81,7 @@ def prepare_image_conf(img, conf, orientation, img_std=-1):
     return img_fin, img_filt, mask_fin
 
 
-def find_overlap_conf(  # noqa
+def find_overlap_conf_old_version(  # noqa
     img_ref,
     conf_ref,
     img_obj,
@@ -152,7 +158,8 @@ def find_overlap_conf(  # noqa
             #  desp_large runs along the direction where the displacement is
             # the largest, so typically will have values between 1700 and 2100,
             # while desp_short runs in the other, and moves between -200 and 200.
-            desp_large = DET_SIZE - 10 - np.arange(STEPS + 1) * DELTA[i_delta] - 1.0
+            desp_large = DET_SIZE - 10 - \
+                np.arange(STEPS + 1) * DELTA[i_delta] - 1.0
             desp_short = (
                 np.arange(STEPS + 1) * DELTA[i_delta]
                 - (STEPS - 1) * DELTA[i_delta] * 0.5
@@ -201,14 +208,14 @@ def find_overlap_conf(  # noqa
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[abs(dx) :,] * maskt[abs(dx) :, :]  # noqa
-                        - t_ref[0:dx,] * mask_ref[0:dx, :]  # noqa
+                        t1[abs(dx):, ] * maskt[abs(dx):, :] -  # noqa
+                        t_ref[0:dx, ] * mask_ref[0:dx, :]  # noqa
                     )
                     #  combined mask
-                    mask_final = maskt[abs(dx) :, :] + mask_ref[0:dx, :]  # noqa
+                    mask_final = maskt[abs(dx):, :] + mask_ref[0:dx, :]  # noqa
                     # and erros added in cuadrature
                     div_t = np.sqrt(
-                        err_ref[0:dx, :] ** 2 + err_1[abs(dx) :,] ** 2  # noqa
+                        err_ref[0:dx, :] ** 2 + err_1[abs(dx):, ] ** 2  # noqa
                     )
                 elif dx == 0:
                     temp = t1 * maskt - t_ref * mask_ref
@@ -216,14 +223,14 @@ def find_overlap_conf(  # noqa
                     mask_final = maskt + mask_ref
                 else:
                     temp = (
-                        t1[0:-dx,] * maskt[0:-dx,]  # noqa
-                        - t_ref[dx:,] * mask_ref[dx:,]  # noqa
+                        t1[0:-dx, ] * maskt[0:-dx, ]  # noqa
+                        - t_ref[dx:, ] * mask_ref[dx:, ]  # noqa
                     )  # noqa
 
-                    mask_final = maskt[0:-dx,] + mask_ref[dx:,]  # noqa
+                    mask_final = maskt[0:-dx, ] + mask_ref[dx:, ]  # noqa
 
                     div_t = np.sqrt(
-                        err_ref[np.abs(dx) :,] ** 2 + err_1[0:-dx,] ** 2  # noqa
+                        err_ref[np.abs(dx):, ] ** 2 + err_1[0:-dx, ] ** 2  # noqa
                     )
                 # if there are not enough good pixels we set chi to 10e7
                 if mask_final.sum() > 0:
@@ -259,3 +266,100 @@ def find_overlap_conf(  # noqa
         dx, dy = -dx, -dy
 
     return int(dx), int(dy)
+
+
+def compare_imgs(desp, im1, co1, im2, co2, do_print):
+    #
+    im2_desp = shift(im2, desp, mode='constant', cval=0, order=1)
+    co2_desp = shift(co2, desp, mode='constant', cval=0, order=1)
+    #
+    co_all = co2_desp * co1
+    #
+    err = np.sum(
+        (co_all * (im2_desp - im1)**2) / (im1 + 0.001)
+    ) / np.sum(co_all)
+    #
+    #
+    if np.isnan(err):
+        return np.inf
+    #
+    if do_print:
+        t_s = ''
+        for t in desp:
+            if np.abs(t) < 1e-3:
+                t_s += ' {0:.1e}'.format(t)
+            else:
+                t_s += ' {0:.3f}'.format(t)
+        print(t_s + ' {0:f}'.format(err))
+    #
+    return err
+
+
+def find_overlap_conf(  # noqa
+    img_ref,
+    conf_ref,
+    img_obj,
+    conf_obj,
+    desp
+):
+    """[summary]
+
+    This calculates the displacementes that minimize the squared difference
+    between images.
+
+    Parameters
+    ----------
+    img_ref : [type]
+        [description]
+    conf_ref : [type]
+        [description]
+    img_obj : [type]
+        [description]
+    conf_obj : [type]
+        [description]
+    desp : []
+        [description]
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+    if desp[0] < 0:
+        r_low_px_0 = 0
+        r_high_px_0 = img_ref.shape[0] + int(desp[0]) - 1
+        o_low_px_0 = abs(int(desp[0]))
+        o_high_px_0 = img_ref.shape[0] - 1
+    else:
+        r_low_px_0 = int(desp[0])
+        r_high_px_0 = img_ref.shape[0] - 1
+        o_low_px_0 = 0
+        o_high_px_0 = img_ref.hape[0] - int(desp[0]) - 1
+    #
+    if desp[1] < 0:
+        r_low_px_1 = 0
+        r_high_px_1 = img_ref.shape[1] + int(desp[1]) - 1
+        o_low_px_1 = abs(int(desp[1]))
+        o_high_px_1 = img_ref.shape[1] - 1
+    else:
+        r_low_px_1 = int(desp[1])
+        r_high_px_1 = img_ref.shape[1] - 1
+        o_low_px_1 = 0
+        o_high_px_1 = img_ref.shape[1] - int(desp[1]) - 1
+    #
+    r_img_cut = gaussian_filter(
+        img_ref[r_low_px_0:r_high_px_0, r_low_px_1:r_high_px_1], 3
+    )
+    r_con_cut = conf_ref[r_low_px_0:r_high_px_0, r_low_px_1:r_high_px_1]
+    o_img_cut = gaussian_filter(
+        img_obj[o_low_px_0:o_high_px_0, o_low_px_1:o_high_px_1], 3
+    )
+    o_con_cut = conf_obj[o_low_px_0:o_high_px_0, o_low_px_1:o_high_px_1]
+    #
+    res = minimize(
+        compare_imgs, [0., 0.],
+        args=(r_img_cut, r_con_cut, o_img_cut, o_con_cut, False),
+        method='Powell', options={'ftol': Settings.ftol_desp}
+    )
+    #
+    return res['x'][0], res['x'][1]
