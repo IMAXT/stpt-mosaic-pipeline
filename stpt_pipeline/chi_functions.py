@@ -8,8 +8,9 @@ from scipy.ndimage import gaussian_filter,shift
 
 from .settings import Settings
 
-log = logging.getLogger('owl.daemon.pipeline')
+from .mutual_info import mutual_information
 
+log = logging.getLogger('owl.daemon.pipeline')
 
 def mad(x):
     """[summary]
@@ -268,21 +269,27 @@ def find_overlap_conf_old_version(  # noqa
     return int(dx), int(dy)
 
 
-def compare_imgs(desp, im1, co1, im2, co2, do_print):
-    #
+def compare_imgs(
+    desp,
+    im1,
+    co1,
+    im2,
+    co2,
+    do_print
+):
+    
     im2_desp = shift(im2, desp, mode='constant', cval=0, order=1)
     co2_desp = shift(co2, desp, mode='constant', cval=0, order=1)
-    #
+
     co_all = co2_desp * co1
-    #
+
     err = np.sum(
         (co_all * (im2_desp - im1)**2) / (im1 + 0.001)
     ) / np.sum(co_all)
-    #
-    #
+
     if np.isnan(err):
         return np.inf
-    #
+
     if do_print:
         t_s = ''
         for t in desp:
@@ -291,7 +298,7 @@ def compare_imgs(desp, im1, co1, im2, co2, do_print):
             else:
                 t_s += ' {0:.3f}'.format(t)
         print(t_s + ' {0:f}'.format(err))
-    #
+
     return err
 
 
@@ -335,7 +342,7 @@ def find_overlap_conf(  # noqa
         r_high_px_0 = img_ref.shape[0] - 1
         o_low_px_0 = 0
         o_high_px_0 = img_ref.hape[0] - int(desp[0]) - 1
-    #
+
     if desp[1] < 0:
         r_low_px_1 = 0
         r_high_px_1 = img_ref.shape[1] + int(desp[1]) - 1
@@ -346,7 +353,7 @@ def find_overlap_conf(  # noqa
         r_high_px_1 = img_ref.shape[1] - 1
         o_low_px_1 = 0
         o_high_px_1 = img_ref.shape[1] - int(desp[1]) - 1
-    #
+
     r_img_cut = gaussian_filter(
         img_ref[r_low_px_0:r_high_px_0, r_low_px_1:r_high_px_1], 3
     )
@@ -355,11 +362,19 @@ def find_overlap_conf(  # noqa
         img_obj[o_low_px_0:o_high_px_0, o_low_px_1:o_high_px_1], 3
     )
     o_con_cut = conf_obj[o_low_px_0:o_high_px_0, o_low_px_1:o_high_px_1]
-    #
+
     res = minimize(
         compare_imgs, [0., 0.],
         args=(r_img_cut, r_con_cut, o_img_cut, o_con_cut, False),
         method='Powell', options={'ftol': Settings.ftol_desp}
     )
-    #
-    return res['x'][0], res['x'][1]
+
+    final_desp = [desp[0] + res['x'][0], desp[1] + res['x'][1]]
+
+    # mutual information
+
+    o_img_desp = shift(o_img_cut, final_desp, mode='constant', cval=0, order=1)
+
+    mi = mutual_information(r_img_cut, o_img_desp)
+
+    return final_desp[0], final_desp[1], mi

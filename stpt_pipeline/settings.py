@@ -28,3 +28,5 @@ class Settings:
     normal_y = 1000
 
     ftol_desp = 0.1 # relative tolerance for convergence when calculating offsets
+
+    mosaic_scale=5.55 # mosaic displacement units to pixel

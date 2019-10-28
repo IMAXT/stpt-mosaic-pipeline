@@ -214,9 +214,8 @@ class Section:
                 if i > this_img:
                     continue
 
-                orientation = self.find_orientation(
-                    dx0[i], dy0[i], dx0[this_img], dy0[this_img]
-                )
+                desp=[(self['Xpos'][this_img]-self['Xpos'][i])/Settings.mosaic_scale,\
+                    (self['Ypos'][this_img]-self['Ypos'][i])/Settings.mosaic_scale]
 
                 im_obj = da.from_zarr(img_cube[this_img])
                 res = delayed(find_overlap_conf)(
@@ -224,8 +223,7 @@ class Section:
                     dist_conf,
                     im_obj,
                     dist_conf,
-                    orientation,
-                    img_std=img_cube_mean_std,
+                    desp,
                 )
                 results.append(_sink(i, this_img, res))
 
@@ -233,15 +231,16 @@ class Section:
         offsets = []
         for fut in as_completed(futures):
             i, j, res = fut.result()
-            dx, dy = res
-            offsets.append([i, j, dx, dy])
+            dx, dy, mi = res
+            offsets.append([i, j, dx, dy, mi])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d',
+                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %d',
                 self._section.name,
                 i,
                 j,
                 dx,
                 dy,
+                mi,
             )
 
         self._section.attrs['offsets'] = offsets
