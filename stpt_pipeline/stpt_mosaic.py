@@ -156,6 +156,21 @@ class Section:
         dy0 = np.round((dy - dy.min()) / delta_y).astype(int)
         return (dx0, dy0)
 
+    def get_mos_pos(self) -> Tuple[np.ndarray]:
+        """Find the mosaic grid
+
+        Returns
+        -------
+        dx, dy
+            Coordinates of each image in mosaic units
+        """
+
+        dx = np.array(self['XPos'])
+        dy = np.array(self['YPos'])
+
+        return (dx, dy)
+
+
     def find_orientation(self, dx1: int, dy1: int, dx2: int, dy2: int) -> str:
         """Find the relative orientation between grid positions of two images
 
@@ -203,6 +218,7 @@ class Section:
         dist_conf = self.get_distconf()
 
         dx0, dy0 = self.find_grid()
+        dx_mos, dy_mos = self.get_mos_pos()
 
         for i, img in enumerate(img_cube):
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
@@ -214,8 +230,15 @@ class Section:
                 if i > this_img:
                     continue
 
-                desp=[(self['Xpos'][this_img]-self['Xpos'][i])/Settings.mosaic_scale,\
-                    (self['Ypos'][this_img]-self['Ypos'][i])/Settings.mosaic_scale]
+                desp=[(dx_mos[this_img]-dx_mos[i])/Settings.mosaic_scale,\
+                    (dy_mos[this_img]-dy_mos[i])/Settings.mosaic_scale]
+
+                log.info('Initial offsets i: %d j: %d dx: %d dy: %d',
+                    i,
+                    this_img,
+                    desp[0],
+                    desp[1],
+                )
 
                 im_obj = da.from_zarr(img_cube[this_img])
                 res = delayed(find_overlap_conf)(

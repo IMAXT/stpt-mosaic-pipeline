@@ -341,7 +341,7 @@ def find_overlap_conf(  # noqa
         r_low_px_0 = int(desp[0])
         r_high_px_0 = img_ref.shape[0] - 1
         o_low_px_0 = 0
-        o_high_px_0 = img_ref.hape[0] - int(desp[0]) - 1
+        o_high_px_0 = img_ref.shape[0] - int(desp[0]) - 1
 
     if desp[1] < 0:
         r_low_px_1 = 0
