@@ -224,7 +224,7 @@ class Section:
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
             i_t = np.where(r == 1)[0].tolist()
 
-            im_ref = da.from_zarr(img)
+            im_i = da.from_zarr(img)
 
             for this_img in i_t:
                 if i > this_img:
@@ -233,14 +233,28 @@ class Section:
                 desp=[(dx_mos[this_img]-dx_mos[i])/Settings.mosaic_scale,\
                     (dy_mos[this_img]-dy_mos[i])/Settings.mosaic_scale]
 
+                # trying to do always positive displacements
+
+                if (desp[0]<-1000) | (desp[1]<-1000):
+                    desp[0]*=-1
+                    desp[1]*=-1
+                    obj_img=i
+                    im_obj=im_i
+                    ref_img=this_img
+                    im_ref = da.from_zarr(img_cube[this_img])
+                else:
+                    obj_img=this_img
+                    im_obj = da.from_zarr(img_cube[this_img])
+                    ref_img=i
+                    im_ref=im_i
+
                 log.info('Initial offsets i: %d j: %d dx: %d dy: %d',
-                    i,
-                    this_img,
+                    ref_img,
+                    obj_img,
                     desp[0],
                     desp[1],
                 )
 
-                im_obj = da.from_zarr(img_cube[this_img])
                 res = delayed(find_overlap_conf)(
                     im_ref,
                     dist_conf,
@@ -248,7 +262,7 @@ class Section:
                     dist_conf,
                     desp,
                 )
-                results.append(_sink(i, this_img, res))
+                results.append(_sink(ref_img, obj_img, res))
 
         futures = client.compute(results)
         offsets = []
@@ -257,7 +271,7 @@ class Section:
             dx, dy, mi = res
             offsets.append([i, j, dx, dy, mi])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %d',
+                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f',
                 self._section.name,
                 i,
                 j,
