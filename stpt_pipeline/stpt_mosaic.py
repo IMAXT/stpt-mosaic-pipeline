@@ -222,7 +222,10 @@ class Section:
 
         for i, img in enumerate(img_cube):
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
-            i_t = np.where(r == 1)[0].tolist()
+
+            # including diagonals
+
+            i_t = np.where((r <= np.sqrt(2)) & (r > 0))[0].tolist()
 
             im_i = da.from_zarr(img)
 
@@ -230,29 +233,29 @@ class Section:
                 if i > this_img:
                     continue
 
-                desp=[(dx_mos[this_img]-dx_mos[i])/Settings.mosaic_scale,\
-                    (dy_mos[this_img]-dy_mos[i])/Settings.mosaic_scale]
+                desp = [(dx_mos[this_img]-dx_mos[i]) / Settings.mosaic_scale,\
+                    (dy_mos[this_img]-dy_mos[i]) / Settings.mosaic_scale]
 
                 # trying to do always positive displacements
 
-                if (desp[0]<-1000) | (desp[1]<-1000):
-                    desp[0]*=-1
-                    desp[1]*=-1
-                    obj_img=i
-                    im_obj=im_i
-                    ref_img=this_img
+                if (desp[0] < -1000) | (desp[1] < -1000):
+                    desp[0] *= -1
+                    desp[1] *= -1
+                    obj_img = i
+                    im_obj = im_i
+                    ref_img = this_img
                     im_ref = da.from_zarr(img_cube[this_img])
                 else:
-                    obj_img=this_img
+                    obj_img = this_img
                     im_obj = da.from_zarr(img_cube[this_img])
-                    ref_img=i
-                    im_ref=im_i
+                    ref_img = i
+                    im_ref = im_i
 
                 log.info('Initial offsets i: %d j: %d dx: %d dy: %d',
-                    ref_img,
-                    obj_img,
-                    desp[0],
-                    desp[1],
+                        ref_img,
+                        obj_img,
+                        desp[0],
+                        desp[1],
                 )
 
                 res = delayed(find_overlap_conf)(
@@ -268,18 +271,20 @@ class Section:
         offsets = []
         for fut in as_completed(futures):
             i, j, res = fut.result()
-            dx, dy, mi = res
-            offsets.append([i, j, dx, dy, mi])
+            dx, dy, mi, npx = res
+            offsets.append([i, j, dx, dy, npx, mi])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f',
+                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f npx: %d',
                 self._section.name,
                 i,
                 j,
                 dx,
                 dy,
                 mi,
+                npx,
             )
-
+        for iof in offsets:
+            print(iof)
         self._section.attrs['offsets'] = offsets
         del img_cube_mean_std
 

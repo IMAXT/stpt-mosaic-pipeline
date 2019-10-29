@@ -373,6 +373,6 @@ def find_overlap_conf(  # noqa
 
     # mutual information per good pixel
 
-    mi = mutual_information(r_img_cut, o_img_cut, res['x']) / r_con_cut.sum()
+    mi = mutual_information(r_img_cut, o_img_cut, res['x'])
 
-    return final_desp[0], final_desp[1], mi
+    return final_desp[0], final_desp[1], mi, r_con_cut.astype('float64').sum()
