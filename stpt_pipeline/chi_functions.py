@@ -375,4 +375,6 @@ def find_overlap_conf(  # noqa
 
     mi = mutual_information(r_img_cut, o_img_cut, res['x'])
 
-    return final_desp[0], final_desp[1], mi, r_con_cut.astype('float64').sum()
+    avg_flux=(r_img_cut*r_con_cut).sum()/r_con_cut.sum()
+
+    return final_desp[0], final_desp[1], mi, np.float(avg_flux)
