@@ -17,7 +17,7 @@ blosc.use_threads = False  # TODO: Check if this makes it quicker or slower
 def preprocess(input_dir: Path, output: Path):
     ds = xr.Dataset()
     ds.to_zarr(output, mode='w')
-    for s in sorted(input_dir.glob('S???')):
+    for s in sorted(input_dir.glob('S???'))[:2]:
         ds = xr.Dataset()
         tiles = []
         for t in sorted(s.glob('T???')):
@@ -46,9 +46,6 @@ def preprocess(input_dir: Path, output: Path):
                 'x': range(nx),
             },
         )
-        arr.attrs['OME'] = json.dumps(metadata)
-        ds[s.name] = arr
-        ds.attrs['orig_path'] = f'{input_dir}'
 
         m = MosaicDict()
         _ = [
@@ -58,7 +55,14 @@ def preprocess(input_dir: Path, output: Path):
             ]
             if '#text' in a.keys()
         ]
+
+        arr.attrs['OME'] = json.dumps(metadata)
         for k in m.keys():
-            ds.attrs[k] = m[k]
+            arr.attrs[k] = m[k]
+
+        ds[s.name] = arr
+        ds.attrs[k] = arr.attrs
+
+        ds.attrs['orig_path'] = f'{input_dir}'
 
         ds.to_zarr(output, mode='a')
