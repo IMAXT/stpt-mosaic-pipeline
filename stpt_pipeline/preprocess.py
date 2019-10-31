@@ -113,7 +113,8 @@ def save_image(filename, z, section, first_offset, fovs):
     zslice = (offset - first_offset) // fovs
     fov = offset - (first_offset + fovs * zslice)
     try:
-        g = z.create_group(f'section={section}/fov={fov}/z={zslice}/channel={channel}')
+        g = z.create_group(
+            f'section={section}/fov={fov}/z={zslice}/channel={channel}')
     except ValueError:
         g = z[f'section={section}/fov={fov}/z={zslice}/channel={channel}']
     d = g.create_dataset('raw', data=img.asarray(), chunks=False)

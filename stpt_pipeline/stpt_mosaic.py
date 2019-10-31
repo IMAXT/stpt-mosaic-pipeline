@@ -26,7 +26,8 @@ def _sink(*args):
 def _get_image(group, path, imgtype, shape):
     g = group.require_group(path)
     try:
-        arr = g.create_dataset(imgtype, shape=shape, chunks=(250, 250), dtype='float32')
+        arr = g.create_dataset(imgtype, shape=shape,
+                               chunks=(250, 250), dtype='float32')
     except ValueError:
         arr = g[imgtype]
     log.info('Image %s/%s created', g.path, imgtype)
@@ -134,7 +135,8 @@ class Section:
         dx = np.array(self['XPos'])
         dy = np.array(self['YPos'])
 
-        r = np.sqrt((dx.astype(float) - dx[0]) ** 2 + (dy.astype(float) - dy[0]) ** 2)
+        r = np.sqrt((dx.astype(float) - dx[0])
+                    ** 2 + (dy.astype(float) - dy[0]) ** 2)
         r[0] = r.max()  # avoiding minimum at itself
         # first candidate
         dx_1 = np.abs(dx[r.argmin()] - dx[0])
@@ -169,7 +171,6 @@ class Section:
         dy = np.array(self['YPos'])
 
         return (dx, dy)
-
 
     def find_orientation(self, dx1: int, dy1: int, dx2: int, dy2: int) -> str:
         """Find the relative orientation between grid positions of two images
@@ -233,8 +234,8 @@ class Section:
                 if i > this_img:
                     continue
 
-                desp = [(dx_mos[this_img]-dx_mos[i]) / Settings.mosaic_scale,\
-                    (dy_mos[this_img]-dy_mos[i]) / Settings.mosaic_scale]
+                desp = [(dx_mos[this_img] - dx_mos[i]) / Settings.mosaic_scale,
+                        (dy_mos[this_img] - dy_mos[i]) / Settings.mosaic_scale]
 
                 # trying to do always positive displacements
 
@@ -252,11 +253,11 @@ class Section:
                     im_ref = im_i
 
                 log.info('Initial offsets i: %d j: %d dx: %d dy: %d',
-                        ref_img,
-                        obj_img,
-                        desp[0],
-                        desp[1],
-                )
+                         ref_img,
+                         obj_img,
+                         desp[0],
+                         desp[1],
+                         )
 
                 res = delayed(find_overlap_conf)(
                     im_ref,
@@ -274,7 +275,7 @@ class Section:
             dx, dy, mi, npx = res
             offsets.append([i, j, dx, dy, npx, mi])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f npx: %d',
+                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f',
                 self._section.name,
                 i,
                 j,
@@ -283,8 +284,7 @@ class Section:
                 mi,
                 npx,
             )
-        for iof in offsets:
-            print(iof)
+
         self._section.attrs['offsets'] = offsets
         del img_cube_mean_std
 
@@ -380,22 +380,22 @@ class Section:
                     ) ** 2 == 1.0:
                         if err_px[f'{ref_img}:{this_img}'] < ERROR_THRESHOLD:
                             temp_pos[0] += (
-                                abs_pos[ref_img, 0]
-                                + self._px[f'{ref_img}:{this_img}'][0]
+                                abs_pos[ref_img, 0] +
+                                self._px[f'{ref_img}:{this_img}'][0]
                             )
                             temp_pos[1] += (
-                                abs_pos[ref_img, 1]
-                                + self._px[f'{ref_img}:{this_img}'][1]
+                                abs_pos[ref_img, 1] +
+                                self._px[f'{ref_img}:{this_img}'][1]
                             )
                             temp_err += 5.0 ** 2
                         else:
                             temp_pos[0] += (
-                                abs_pos[ref_img, 0]
-                                + self._mu[f'{ref_img}:{this_img}'][0] / y_scale
+                                abs_pos[ref_img, 0] +
+                                self._mu[f'{ref_img}:{this_img}'][0] / y_scale
                             )
                             temp_pos[1] += (
-                                abs_pos[ref_img, 1]
-                                + self._mu[f'{ref_img}:{this_img}'][1] / x_scale
+                                abs_pos[ref_img, 1] +
+                                self._mu[f'{ref_img}:{this_img}'][1] / x_scale
                             )
                             temp_err += 15.0 ** 2
 

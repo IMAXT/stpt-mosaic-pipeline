@@ -4,13 +4,14 @@ import numpy as np
 
 from scipy.optimize import minimize
 
-from scipy.ndimage import gaussian_filter,shift
+from scipy.ndimage import gaussian_filter, shift
 
 from .settings import Settings
 
 from .mutual_info import mutual_information
 
 log = logging.getLogger('owl.daemon.pipeline')
+
 
 def mad(x):
     """[summary]
@@ -162,16 +163,16 @@ def find_overlap_conf_old_version(  # noqa
             desp_large = DET_SIZE - 10 - \
                 np.arange(STEPS + 1) * DELTA[i_delta] - 1.0
             desp_short = (
-                np.arange(STEPS + 1) * DELTA[i_delta]
-                - (STEPS - 1) * DELTA[i_delta] * 0.5
+                np.arange(STEPS + 1) * DELTA[i_delta] -
+                (STEPS - 1) * DELTA[i_delta] * 0.5
             )
         else:
             # in case there is a prior estimation of the displacement
             # that minimizes chi, the vectors are centered at that point
             desp_short = (
-                np.arange(STEPS) * DELTA[i_delta]
-                - (STEPS - 1) * DELTA[i_delta] * 0.5
-                + dx
+                np.arange(STEPS) * DELTA[i_delta] -
+                (STEPS - 1) * DELTA[i_delta] * 0.5 +
+                dx
             )
             # this just makes sure that we don't run out of image
             if (STEPS - 1) * DELTA[i_delta] * 0.5 + dy >= DET_SIZE:
@@ -180,10 +181,10 @@ def find_overlap_conf_old_version(  # noqa
                 delta_cor = 0
 
             desp_large = (
-                np.arange(STEPS) * DELTA[i_delta]
-                - (STEPS - 1) * DELTA[i_delta] * 0.5
-                + dy
-                - delta_cor
+                np.arange(STEPS) * DELTA[i_delta] -
+                (STEPS - 1) * DELTA[i_delta] * 0.5 +
+                dy -
+                delta_cor
             )
         # because these will be used as indexes, need to be
         # cast as ints.
@@ -209,8 +210,8 @@ def find_overlap_conf_old_version(  # noqa
                     # is positive, negative or zero the indexes need to be generated,
                     # so there's on branch of the if
                     temp = (
-                        t1[abs(dx):, ] * maskt[abs(dx):, :] -  # noqa
-                        t_ref[0:dx, ] * mask_ref[0:dx, :]  # noqa
+                        t1[abs(dx):, ] * maskt[abs(dx):, :]  # noqa
+                        - t_ref[0:dx, ] * mask_ref[0:dx, :]  # noqa
                     )
                     #  combined mask
                     mask_final = maskt[abs(dx):, :] + mask_ref[0:dx, :]  # noqa
@@ -224,8 +225,8 @@ def find_overlap_conf_old_version(  # noqa
                     mask_final = maskt + mask_ref
                 else:
                     temp = (
-                        t1[0:-dx, ] * maskt[0:-dx, ]  # noqa
-                        - t_ref[dx:, ] * mask_ref[dx:, ]  # noqa
+                        t1[0:-dx, ] * maskt[0:-dx, ] -  # noqa
+                        t_ref[dx:, ] * mask_ref[dx:, ]  # noqa
                     )  # noqa
 
                     mask_final = maskt[0:-dx, ] + mask_ref[dx:, ]  # noqa
@@ -277,7 +278,7 @@ def compare_imgs(
     co2,
     do_print
 ):
-    
+
     im2_desp = shift(im2, desp, mode='constant', cval=0, order=1)
     co2_desp = shift(co2, desp, mode='constant', cval=0, order=1)
 
@@ -375,6 +376,6 @@ def find_overlap_conf(  # noqa
 
     mi = mutual_information(r_img_cut, o_img_cut, res['x'])
 
-    avg_flux=(r_img_cut*r_con_cut).sum()/r_con_cut.sum()
+    avg_flux = (r_img_cut * r_con_cut).sum() / r_con_cut.sum()
 
     return final_desp[0], final_desp[1], mi, np.float(avg_flux)
