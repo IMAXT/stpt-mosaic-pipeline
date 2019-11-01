@@ -138,12 +138,11 @@ def apply_geometric_transform(d, flat, cof_dist):
     """
     import time
 
-    w = time.monotonic()
     if flat is not None:
         cropped = magic_function(d, flat=flat)
     else:
         cropped = d
-    w = time.monotonic()
+
     new = geometric_transform(
         cropped.astype('float32'),
         get_coords,

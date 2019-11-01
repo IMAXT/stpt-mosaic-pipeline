@@ -7,13 +7,13 @@ name: stpt
 
 # Pipeline arguments
 root_dir: /data/meds1_b/imaxt_data/stpt/20190201/20190201_tumour_opticalsections_extraoverlap
-output_dir: /data/meds1_b/eglez/imaxt/stpt/test1
+output_dir: /data/meds1_a/cgonzal/imaxt/stpt/test1
 flat_file: /data/meds1_a/cgonzal/imaxt/stpt_desp_final/flat2.npy
 
 cof_dist:
-  cof_x: [4.70303847, -0.153181913, 5.76840847]
-  cof_y: [2.00350541, -1.71634681, 0.423025480]
-  tan: [1.03828110e+03, 1.00987477e+03]
+  cof_x: [1.9297142680528, 5.648106740746683, 1.7119164525741482, 0.49092827114841253, 0.30533582525935293]
+  cof_y: [-1.8323682448586411, -3.2544164441438217, 1.342066369598444, -0.23116327451466817, -0.05166393379719083]
+  tan: [979.7716134 , 1040.55802372]
 
 # Resources requested
 resources:

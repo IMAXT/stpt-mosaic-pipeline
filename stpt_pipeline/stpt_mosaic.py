@@ -224,9 +224,9 @@ class Section:
         for i, img in enumerate(img_cube):
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
 
-            # including diagonals
+            # including no diagonals
 
-            i_t = np.where((r <= np.sqrt(2)) & (r > 0))[0].tolist()
+            i_t = np.where((r <= np.sqrt(1)) & (r > 0))[0].tolist()
 
             im_i = da.from_zarr(img)
 
