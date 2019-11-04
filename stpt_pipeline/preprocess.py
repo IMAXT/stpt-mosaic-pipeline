@@ -121,7 +121,7 @@ def save_image(filename, z, section, first_offset, fovs):
     return d
 
 
-def apply_geometric_transform(d, flat, cof_dist):
+def apply_geometric_transform(d, flat, cof_dist, norm_val=10000):
     """[summary]
 
     Parameters
@@ -139,7 +139,7 @@ def apply_geometric_transform(d, flat, cof_dist):
     import time
 
     if flat is not None:
-        cropped = magic_function(d, flat=flat)
+        cropped = magic_function(d, flat=flat, norm_val=norm_val)
     else:
         cropped = d
 
@@ -162,7 +162,7 @@ def apply_geometric_transform(d, flat, cof_dist):
     return new
 
 
-def geom(d, flat=1, cof_dist=None):
+def geom(d, flat=1, cof_dist=None, norm_val=10000.):
     """[summary]
 
     Parameters
@@ -179,7 +179,7 @@ def geom(d, flat=1, cof_dist=None):
     """
     assert cof_dist is not None
 
-    new = apply_geometric_transform(d[:], flat, cof_dist)
+    new = apply_geometric_transform(d[:], flat, cof_dist, norm_val=norm_val)
 
     fh = zarr.group(store=d.store)
     path = d.path.replace('/raw', '')
@@ -236,7 +236,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
         res = []
         for f in d.glob('*.tif'):
             r = delayed(save_image)(f, z, section, first_offset, fovs)
-            g = delayed(geom)(r, flat=nflat, cof_dist=Settings.cof_dist)
+            g = delayed(geom)(r, flat=nflat, cof_dist=Settings.cof_dist, norm_val=Settings.norm_val)
             res.append(g)
 
         client = Client.current()
@@ -256,7 +256,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
 
     with suppress(UnboundLocalError):
         conf = np.ones((int(mosaic['columns']), int(mosaic['rows'])))
-        conf = magic_function(conf)
+        conf = magic_function(conf, norm_val=1.0)
 
         dist_conf = apply_geometric_transform(conf, None, Settings.cof_dist)
 

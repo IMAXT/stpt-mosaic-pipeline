@@ -59,7 +59,7 @@ def defringe(img):
     return fr_img
 
 
-def magic_function(x, flat=1):  # TODO: Call this some other name
+def magic_function(x, flat=1, norm_val=10000.):  # TODO: Call this some other name
     """[summary]
 
     This function transform the raw images into the ones used
@@ -79,7 +79,6 @@ def magic_function(x, flat=1):  # TODO: Call this some other name
     """
     x_min, x_max = Settings.x_min, Settings.x_max
     y_min, y_max = Settings.y_min, Settings.y_max
-    norm_val = Settings.norm_val
     res = np.flipud(x / flat) / norm_val
     mask = np.zeros_like(res)
     mask[x_min:x_max, y_min:y_max] = 1
