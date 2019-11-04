@@ -33,8 +33,8 @@ def get_coords(tuple coords, list cof_x, list cof_y, list tan, float normal_x, f
 
     xx = x_adim*x_adim
     yy = y_adim*y_adim
-    distorted_x = c0 + x_adim*(xc0 + y_adim*xc1 + x_adim*y_adim*xc2 + yy*xc3 + x_adim*xx*xc4)
-    distorted_y = c1 + y_adim*(yc0 + x_adim*yc1 + y_adim*x_adim*yc2 + xx*yc3 + y_adim*yy*yc4)
+    distorted_x = c0 + x_adim*(yy*xc0 + xx*xc1 + xx*y_adim*xc2 + xx*yy*xc3 + xx*xx*xc4)
+    distorted_y = c1 + y_adim*(xx*yc0 + yy*yc1 + yy*x_adim*yc2 + yy*xx*yc3 + yy*yy*yc4)
 
     res = (distorted_x, distorted_y)
     return res
