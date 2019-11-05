@@ -56,6 +56,8 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
         xslice = slice(x0, x0 + im_t[i].shape[0])
         yslice = slice(y0, y0 + im_t[i].shape[1])
 
+        log.debug('i: %d x:%d y:%d sx:%d sy:%d',i,x0,y0,im_t[i].shape[0],im_t[i].shape[1])
+
         big_picture[xslice, yslice] += im_t[i][:]
         overlap[xslice, yslice] += conf[:]
         pos_err[xslice, yslice] += abs_err[i]
@@ -413,27 +415,35 @@ class Section:
                             default_desp = default_y
                             default_err = dev_y
 
+                        # All the displacements are peositive,
+                        # we need to recuperate the sign
+                        if (dx0[ref_img] - dx0[this_img] < 0) | \
+                            (dy0[ref_img] - dy0[this_img] < 0):
+                            desp_direction=1.0
+                        else:
+                            desp_direction=-1.0
+
                         err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
                                 + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
                                 
                         if err_px < default_err*5.0:
                             temp_pos[0].append(
                                 abs_pos[ref_img, 0] +
-                                self._px[f'{ref_img}:{this_img}'][0]
+                                desp_direction * self._px[f'{ref_img}:{this_img}'][0]
                             )
                             temp_pos[1].append(
                                 abs_pos[ref_img, 1] +
-                                self._px[f'{ref_img}:{this_img}'][1]
+                                desp_direction * self._px[f'{ref_img}:{this_img}'][1]
                             )
                             temp_err.append(1.0)  # this seems to be the error for good pairs
                             # weights
                             weight.append(self._avg[f'{ref_img}:{this_img}']**2)
                         else:
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0] + default_desp[0]
+                                abs_pos[ref_img, 0] + desp_direction * default_desp[0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1] + default_desp[1]
+                                abs_pos[ref_img, 1] + desp_direction * default_desp[1]
                             )
                             temp_err.append(default_err ** 2)
                             weight.append(0.01 ** 2) # artificially low weight
