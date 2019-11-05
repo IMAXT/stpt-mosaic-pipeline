@@ -7,7 +7,7 @@ import zarr
 from dask import delayed
 from distributed import Client, as_completed
 
-from .chi_functions import find_overlap_conf
+from .chi_functions import find_overlap_conf,mad
 from .preprocess import apply_geometric_transform
 from .retry import retry
 from .settings import Settings
@@ -288,36 +288,19 @@ class Section:
         self._section.attrs['offsets'] = offsets
         del img_cube_mean_std
 
-    def compute_scale(self):
+    def compute_pairs(self):
         """Return the scale of the detector
         """
         offsets = self['offsets']
         dx, dy = self['XPos'], self['YPos']
 
-        px = {f'{o[0]}:{o[1]}': o[2:] for o in offsets}
+        px = {f'{o[0]}:{o[1]}': o[2:4] for o in offsets}
         mu = {
             f'{o[0]}:{o[1]}': [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]]
             for o in offsets
         }
-
-        # Mu to px scale
-        # we remove null theoretical displacements, bad measurements and
-        # the random measured jitter (dx<1000) as these are not supposed to happen,
-        # and they throw the ratio off
-        x_scale = np.median(
-            [
-                m[0] / p[0]
-                for m, p in zip(mu.values(), px.values())
-                if (abs(p[0]) < 5000) & (abs(p[0] > 1000))
-            ]
-        )
-        y_scale = np.median(
-            [
-                m[1] / p[1]
-                for m, p in zip(mu.values(), px.values())
-                if (abs(p[1]) < 5000) & (abs(p[1] > 1000))
-            ]
-        )
+        mi = {f'{o[0]}:{o[1]}': o[-1] for o in offsets}
+        avg_flux = {f'{o[0]}:{o[1]}': o[-2] for o in offsets}
 
         for key in list(px):
             i, j = key.split(':')
@@ -328,22 +311,64 @@ class Section:
             mu[f'{j}:{i}'] = [-item for item in mu[f'{i}:{j}']]
 
         self._px, self._mu = px, mu
+        self._mi, self._avg = mi, avg_flux
 
-        log.debug('Scale %f %f', x_scale, y_scale)
 
-        err_px = {}
-        for key in mu:
-            y_diff = px[key][0] - mu[key][0] / y_scale
-            x_diff = px[key][1] - mu[key][1] / x_scale
-            err_px[key] = np.sqrt(x_diff ** 2 + y_diff ** 2)
+    def get_default_displacement(self):
+        """Calculates the default displacements in X and Y
+        from the offsets estimated for every pair of images.
+        Measured individual displacements are weighted with
+        the average flux in the overlap region
+        """
 
-        return x_scale, y_scale, err_px
+        offsets = self['offsets']
+        
+        px_x = np.zeros(len(offsets))
+        px_y = np.zeros(len(offsets))
+        avg_flux = np.zeros(len(offsets))
+        for o in range(len(offsets)):
+            px_x[o] = offsets[o][2]
+            px_y[o] = offsets[o][3]
+            avg_flux[o] = offsets[o][-2]
+
+        #
+        ii = np.where(
+            (np.abs(px_y) < 1000) &
+            (np.abs(px_x) > 1000) &
+            (avg_flux > np.median(avg_flux))
+        )[0]
+        default_x = [
+            (px_x[ii]*avg_flux[ii]** 2).sum() / (avg_flux[ii]** 2).sum(),
+            (px_y[ii]*avg_flux[ii]** 2).sum() / (avg_flux[ii]** 2).sum()
+        ]
+        dev_x = 1.48 * np.sqrt(mad(px_x[ii])** 2 + mad(px_y[ii])** 2)
+        ii = np.where(
+            (np.abs(px_x) < 1000) &
+            (np.abs(px_y) > 1000) &
+            (avg_flux > np.median(avg_flux))
+        )[0]
+        default_y = [
+            (px_x[ii]*avg_flux[ii]** 2).sum() / (avg_flux[ii]** 2).sum(),
+            (px_y[ii]*avg_flux[ii]** 2).sum() / (avg_flux[ii]** 2).sum()
+        ]
+        dev_y = 1.48 * np.sqrt(mad(px_x[ii])** 2 + mad(px_y[ii])** 2)
+
+        log.debug(
+            'Default displacement X:  dx:%f , dy:%f, std:%f',
+            default_x[0],default_x[1],dev_x
+        )
+        log.debug(
+            'Default displacement Y:  dx:%f , dy:%f, std:%f',
+            default_y[0],default_y[1],dev_y
+        )
+
+        return default_x, dev_x, default_y, dev_y
 
     def compute_abspos(self):
         """Compute absolute positions of images in the field of view.
         """
         log.info('Processing section %s', self._section.name)
-        x_scale, y_scale, err_px = self.compute_scale()
+        self.compute_pairs()
 
         img_cube = self.get_img_section(0, 1)
         img_cube_stack = da.stack(img_cube)
@@ -353,6 +378,7 @@ class Section:
         # ref_img_assemble = 0
         log.debug('Reference image %d', ref_img_assemble)
         dx0, dy0 = self.find_grid()
+        default_x, dev_x, default_y, dev_y = self.get_default_displacement()
 
         abs_pos = np.zeros((len(dx0), 2))
         abs_pos[ref_img_assemble] = [0.0, 0.0]
@@ -377,27 +403,40 @@ class Section:
                 for ref_img in fixed_pos:
                     if (dx0[ref_img] - dx0[this_img]) ** 2 + (
                         dy0[ref_img] - dy0[this_img]
-                    ) ** 2 == 1.0:
-                        if err_px[f'{ref_img}:{this_img}'] < ERROR_THRESHOLD:
+                    )** 2 == 1.0:
+                        if (dx0[ref_img] - dx0[this_img])** 2 > \
+                            (dy0[ref_img] - dy0[this_img])** 2:
+                            # x displacement
+                            default_desp = default_x
+                            default_err = dev_x
+                        else:
+                            default_desp = default_y
+                            default_err = dev_y
+
+                        err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
+                                + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
+                                
+                        if err_px < default_err*5.0:
                             temp_pos[0] += (
                                 abs_pos[ref_img, 0] +
                                 self._px[f'{ref_img}:{this_img}'][0]
-                            )
+                            ) * self._avg[f'{ref_img}:{this_img}']**2
                             temp_pos[1] += (
                                 abs_pos[ref_img, 1] +
                                 self._px[f'{ref_img}:{this_img}'][1]
-                            )
-                            temp_err += 5.0 ** 2
+                            ) * self._avg[f'{ref_img}:{this_img}']**2
+                            temp_err += 1.0* 0.01 ** 2  # this seems to be the error for good pairs
+                            # weights
+                            n += self._avg[f'{ref_img}:{this_img}']**2
                         else:
                             temp_pos[0] += (
-                                abs_pos[ref_img, 0] +
-                                self._mu[f'{ref_img}:{this_img}'][0] / y_scale
-                            )
+                                abs_pos[ref_img, 0] + default_desp[0]
+                            ) * 0.01 ** 2 # artificially low weight
                             temp_pos[1] += (
-                                abs_pos[ref_img, 1] +
-                                self._mu[f'{ref_img}:{this_img}'][1] / x_scale
-                            )
-                            temp_err += 15.0 ** 2
+                                abs_pos[ref_img, 1] + default_desp[1]
+                            ) * 0.01 ** 2
+                            temp_err += (default_err ** 2) * 0.01 ** 2
+                            n += 0.01**2
 
                         n += 1
                 abs_pos[this_img, 0] = temp_pos[0] / n
