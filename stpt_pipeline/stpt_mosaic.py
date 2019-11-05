@@ -397,9 +397,9 @@ class Section:
 
                 # Now to calculate the final disp, we have to check
                 # if this has been measured more than once
-                temp_pos = [0, 0]
-                temp_err = 0.0
-                n = 0.0
+                temp_pos = [[], []]
+                temp_err = []
+                weight = []
                 for ref_img in fixed_pos:
                     if (dx0[ref_img] - dx0[this_img]) ** 2 + (
                         dy0[ref_img] - dy0[this_img]
@@ -417,31 +417,30 @@ class Section:
                                 + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
                                 
                         if err_px < default_err*5.0:
-                            temp_pos[0] += (
+                            temp_pos[0].append(
                                 abs_pos[ref_img, 0] +
                                 self._px[f'{ref_img}:{this_img}'][0]
-                            ) * self._avg[f'{ref_img}:{this_img}']**2
-                            temp_pos[1] += (
+                            )
+                            temp_pos[1].append(
                                 abs_pos[ref_img, 1] +
                                 self._px[f'{ref_img}:{this_img}'][1]
-                            ) * self._avg[f'{ref_img}:{this_img}']**2
-                            temp_err += 1.0* 0.01 ** 2  # this seems to be the error for good pairs
+                            )
+                            temp_err.append(1.0)  # this seems to be the error for good pairs
                             # weights
-                            n += self._avg[f'{ref_img}:{this_img}']**2
+                            weight.append(self._avg[f'{ref_img}:{this_img}']**2)
                         else:
-                            temp_pos[0] += (
+                            temp_pos[0].append(
                                 abs_pos[ref_img, 0] + default_desp[0]
-                            ) * 0.01 ** 2 # artificially low weight
-                            temp_pos[1] += (
+                            )
+                            temp_pos[1].append(
                                 abs_pos[ref_img, 1] + default_desp[1]
-                            ) * 0.01 ** 2
-                            temp_err += (default_err ** 2) * 0.01 ** 2
-                            n += 0.01**2
+                            )
+                            temp_err.append(default_err ** 2)
+                            weight.append(0.01 ** 2) # artificially low weight
 
-                        n += 1
-                abs_pos[this_img, 0] = temp_pos[0] / n
-                abs_pos[this_img, 1] = temp_pos[1] / n
-                abs_err[this_img] = np.sqrt(temp_err / n)
+                abs_pos[this_img, 0] = (np.array(temp_pos[0]) * np.array(weight)).sum() / np.array(weight).sum()
+                abs_pos[this_img, 1] = (np.array(temp_pos[1]) * np.array(weight)).sum() / np.array(weight).sum()
+                abs_err[this_img] = np.sqrt((np.array(temp_err) * np.array(weight)).sum() / np.array(weight).sum())
                 # this image has been fixed
                 fixed_pos.append(this_img)
                 done += 1
