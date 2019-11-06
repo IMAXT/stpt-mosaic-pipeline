@@ -43,6 +43,8 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
     y_size = int(np.max(abs_pos[:, 1]) - np.min(abs_pos[:, 1])) + shapes[1] + 1
     y_delta = np.min(abs_pos[:, 1])
 
+    log.debug('Mosaic size: %dx%d',x_size,y_size)
+
     store = im_t[0].store
     group = zarr.Group(store)
 
@@ -56,7 +58,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
         xslice = slice(x0, x0 + im_t[i].shape[0])
         yslice = slice(y0, y0 + im_t[i].shape[1])
 
-        log.debug('i: %d x:%d y:%d sx:%d sy:%d',i,x0,y0,im_t[i].shape[0],im_t[i].shape[1])
+        log.debug('i: %d x:%d y:%d sx:%d sy:%d', i, x0, y0,
+            xslice.stop - xslice.start,
+            yslice.stop - yslice.start
+        )
 
         big_picture[xslice, yslice] += im_t[i][:]
         overlap[xslice, yslice] += conf[:]
@@ -448,8 +453,12 @@ class Section:
                             temp_err.append(default_err ** 2)
                             weight.append(0.01 ** 2) # artificially low weight
 
-                abs_pos[this_img, 0] = (np.array(temp_pos[0]) * np.array(weight)).sum() / np.array(weight).sum()
-                abs_pos[this_img, 1] = (np.array(temp_pos[1]) * np.array(weight)).sum() / np.array(weight).sum()
+                abs_pos[this_img, 0] = int(np.round(
+                    (np.array(temp_pos[0])*np.array(weight)).sum() / np.array(weight).sum()
+                ))
+                abs_pos[this_img, 1] = int(np.round(
+                    (np.array(temp_pos[1])*np.array(weight)).sum() / np.array(weight).sum()
+                ))
                 abs_err[this_img] = np.sqrt((np.array(temp_err) * np.array(weight)).sum() / np.array(weight).sum())
                 # this image has been fixed
                 fixed_pos.append(this_img)
