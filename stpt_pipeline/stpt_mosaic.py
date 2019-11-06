@@ -62,11 +62,17 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
             xslice.stop - xslice.start,
             yslice.stop - yslice.start
         )
-
-        big_picture[xslice, yslice] += im_t[i][:]
-        overlap[xslice, yslice] += conf[:]
-        pos_err[xslice, yslice] += abs_err[i]
-
+        try:
+            big_picture[xslice, yslice] += im_t[i][:]
+            overlap[xslice, yslice] += conf[:]
+            pos_err[xslice, yslice] += abs_err[i]
+        except:
+            log.debug('Failed adding image %d',i)
+            log.debug('Image size %d, %d', im_t[i].shape[0], im_t[i].shape[1])
+            log.debug('Mosaic size: %dx%d', x_size, y_size)
+            log.debug('Large Image Size: %dx%d', big_picture.shape[0],big_picture.shape[1])
+            log.debug('X c:%d, s:%d',xslice.start, xslice.stop - xslice.start)
+            log.debug('Y c:%d, s:%d',yslice.start, yslice.stop - yslice.start)
     return out
 
 
@@ -424,9 +430,9 @@ class Section:
                         # we need to recuperate the sign
                         if (dx0[ref_img] - dx0[this_img] < 0) | \
                             (dy0[ref_img] - dy0[this_img] < 0):
-                            desp_direction=1.0
-                        else:
                             desp_direction=-1.0
+                        else:
+                            desp_direction=1.0
 
                         err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
                                 + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
@@ -479,8 +485,11 @@ class Section:
         conf = self.get_distconf()
 
         results = []
-        for sl in range(self.slices):
-            for ch in range(self.channels):
+        # only one slice
+        # for sl in range(self.slices):
+        for sl in range(1):
+            # for ch in range(self.channels):
+            for ch in [3]:
                 im_t = self.get_img_section(sl, ch + 1)
                 out = f'{self.path}/mosaic/z={sl}/channel={ch+1}'
                 res = _mosaic(im_t, conf, abs_pos, abs_err, out=out)
