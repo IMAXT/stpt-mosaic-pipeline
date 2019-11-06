@@ -259,11 +259,13 @@ class Section:
                     im_obj = im_i
                     ref_img = this_img
                     im_ref = da.from_zarr(img_cube[this_img])
+                    sign=-1
                 else:
                     obj_img = this_img
                     im_obj = da.from_zarr(img_cube[this_img])
                     ref_img = i
                     im_ref = im_i
+                    sign=1
 
                 log.info('Initial offsets i: %d j: %d dx: %d dy: %d',
                          ref_img,
@@ -279,16 +281,16 @@ class Section:
                     dist_conf,
                     desp,
                 )
-                results.append(_sink(ref_img, obj_img, res))
+                results.append(_sink(ref_img, obj_img, res, sign))
 
         futures = client.compute(results)
         offsets = []
         for fut in as_completed(futures):
-            i, j, res = fut.result()
+            i, j, res, sign = fut.result()
             dx, dy, mi, npx = res
-            offsets.append([i, j, dx, dy, npx, mi])
+            offsets.append([i, j, dx, dy, npx, mi, sign])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f',
+                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d',
                 self._section.name,
                 i,
                 j,
@@ -296,6 +298,7 @@ class Section:
                 dy,
                 mi,
                 npx,
+                sign,
             )
 
         self._section.attrs['offsets'] = offsets
@@ -312,8 +315,9 @@ class Section:
             f'{o[0]}:{o[1]}': [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]]
             for o in offsets
         }
-        mi = {f'{o[0]}:{o[1]}': o[-1] for o in offsets}
-        avg_flux = {f'{o[0]}:{o[1]}': o[-2] for o in offsets}
+        sign = {f'{o[0]}:{o[1]}': o[-1] for o in offsets}
+        mi = {f'{o[0]}:{o[1]}': o[-2] for o in offsets}
+        avg_flux = {f'{o[0]}:{o[1]}': o[-3] for o in offsets}
 
         for key in list(px):
             i, j = key.split(':')
@@ -325,6 +329,7 @@ class Section:
 
         self._px, self._mu = px, mu
         self._mi, self._avg = mi, avg_flux
+        self._sign = sign
 
 
     def get_default_displacement(self):
@@ -426,35 +431,27 @@ class Section:
                             default_desp = default_y
                             default_err = dev_y
 
-                        # All the displacements are peositive,
-                        # we need to recuperate the sign
-                        if (dx0[ref_img] - dx0[this_img] < 0) | \
-                            (dy0[ref_img] - dy0[this_img] < 0):
-                            desp_direction=-1.0
-                        else:
-                            desp_direction=1.0
-
                         err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
                                 + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
                                 
                         if err_px < default_err*5.0:
                             temp_pos[0].append(
                                 abs_pos[ref_img, 0] +
-                                desp_direction * self._px[f'{ref_img}:{this_img}'][0]
+                                self._sign[f'{ref_img}:{this_img}'] * self._px[f'{ref_img}:{this_img}'][0]
                             )
                             temp_pos[1].append(
                                 abs_pos[ref_img, 1] +
-                                desp_direction * self._px[f'{ref_img}:{this_img}'][1]
+                                self._sign[f'{ref_img}:{this_img}'] * self._px[f'{ref_img}:{this_img}'][1]
                             )
                             temp_err.append(1.0)  # this seems to be the error for good pairs
                             # weights
                             weight.append(self._avg[f'{ref_img}:{this_img}']**2)
                         else:
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0] + desp_direction * default_desp[0]
+                                abs_pos[ref_img, 0] + self._sign[f'{ref_img}:{this_img}'] * default_desp[0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1] + desp_direction * default_desp[1]
+                                abs_pos[ref_img, 1] + self._sign[f'{ref_img}:{this_img}'] * default_desp[1]
                             )
                             temp_err.append(default_err ** 2)
                             weight.append(0.01 ** 2) # artificially low weight

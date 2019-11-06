@@ -18,7 +18,7 @@ from stpt_pipeline.utils import get_coords
 from .mosaic_functions import parse_mosaic_file
 from .retry import retry
 from .settings import Settings
-from .stpt_displacement import defringe, magic_function
+from .stpt_displacement import defringe, preformat_image
 
 log = logging.getLogger('owl.daemon.pipeline')
 blosc.use_threads = False  # TODO: Check if this makes it quicker or slower
@@ -139,7 +139,7 @@ def apply_geometric_transform(d, flat, cof_dist, norm_val=10000):
     import time
 
     if flat is not None:
-        cropped = magic_function(d, flat=flat, norm_val=norm_val)
+        cropped = preformat_image(d, flat=flat, norm_val=norm_val)
     else:
         cropped = d
 
@@ -256,7 +256,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
 
     with suppress(UnboundLocalError):
         conf = np.ones((int(mosaic['columns']), int(mosaic['rows'])))
-        conf = magic_function(conf, norm_val=1.0)
+        conf = preformat_image(conf, norm_val=1.0)
 
         dist_conf = apply_geometric_transform(conf, None, Settings.cof_dist)
 
