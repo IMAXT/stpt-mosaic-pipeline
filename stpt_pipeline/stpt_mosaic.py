@@ -310,27 +310,26 @@ class Section:
         offsets = self['offsets']
         dx, dy = self['XPos'], self['YPos']
 
-        px = {f'{o[0]}:{o[1]}': o[2:4] for o in offsets}
-        mu = {
-            f'{o[0]}:{o[1]}': [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]]
-            for o in offsets
-        }
-        sign = {f'{o[0]}:{o[1]}': o[-1] for o in offsets}
-        mi = {f'{o[0]}:{o[1]}': o[-2] for o in offsets}
-        avg_flux = {f'{o[0]}:{o[1]}': o[-3] for o in offsets}
+        px = {}
+        mu = {}
+        mi = {}
+        avg_flux = {}
 
-        for key in list(px):
-            i, j = key.split(':')
-            px[f'{j}:{i}'] = [-item for item in px[f'{i}:{j}']]
+        for o in offsets:
+            px[f'{o[0]}:{o[1]}'] = o[2:4]
+            px[f'{o[1]}:{o[0]}'] = [-1.0 * o[2], -1.0 * o[3]]
 
-        for key in list(mu):
-            i, j = key.split(':')
-            mu[f'{j}:{i}'] = [-item for item in mu[f'{i}:{j}']]
+            mu[f'{o[0]}:{o[1]}'] = [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]] 
+            mu[f'{o[1]}:{o[0]}'] = [dx[o[0]] - dx[o[1]], dy[o[0]] - dy[o[1]]] 
+
+            mi[f'{o[0]}:{o[1]}'] = o[-2]
+            mi[f'{o[1]}:{o[0]}'] = o[-2]
+
+            avg_flux[f'{o[0]}:{o[1]}'] = o[-3]
+            avg_flux[f'{o[1]}:{o[0]}'] = o[-3]
 
         self._px, self._mu = px, mu
         self._mi, self._avg = mi, avg_flux
-        self._sign = sign
-
 
     def get_default_displacement(self):
         """Calculates the default displacements in X and Y
@@ -403,6 +402,8 @@ class Section:
         abs_err = np.zeros(len(dx0))
         abs_err[ref_img_assemble] = 0.0
         fixed_pos = [ref_img_assemble]
+        pos_quality = np.zeros(len(dx0))
+        pos_quality[ref_img_assemble] = 1.0
         # now for every fixed, see which ones overlap
         done = 1.0
         for i in fixed_pos:
@@ -418,58 +419,80 @@ class Section:
                 temp_pos = [[], []]
                 temp_err = []
                 weight = []
+                temp_qual = []
+                prov_im=[]
                 for ref_img in fixed_pos:
-                    if (dx0[ref_img] - dx0[this_img]) ** 2 + (
-                        dy0[ref_img] - dy0[this_img]
-                    )** 2 == 1.0:
-                        if (dx0[ref_img] - dx0[this_img])** 2 > \
-                            (dy0[ref_img] - dy0[this_img])** 2:
+                    desp_grid_x = dx0[ref_img] - dx0[this_img]
+                    desp_grid_y = dy0[ref_img] - dy0[this_img]
+                    
+                    if desp_grid_x ** 2 + desp_grid_y ** 2 == 1.0:
+
+                        if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = default_x
+                            default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
+                            if desp_grid_x < 0:
+                                default_desp = [default_x[0], default_x[1]]
                             default_err = dev_x
                         else:
-                            default_desp = default_y
+                            default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
+                            if desp_grid_y < 0:
+                                default_desp = [default_y[0], default_y[1]]
                             default_err = dev_y
 
                         err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
                                 + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
                                 
-                        if err_px < default_err*5.0:
+                        if err_px < default_err * 5.0:
+                            # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0] +
-                                self._sign[f'{ref_img}:{this_img}'] * self._px[f'{ref_img}:{this_img}'][0]
+                                abs_pos[ref_img, 0] + self._px[f'{ref_img}:{this_img}'][0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1] +
-                                self._sign[f'{ref_img}:{this_img}'] * self._px[f'{ref_img}:{this_img}'][1]
+                                abs_pos[ref_img, 1] + self._px[f'{ref_img}:{this_img}'][1]
                             )
                             temp_err.append(1.0)  # this seems to be the error for good pairs
                             # weights
-                            weight.append(self._avg[f'{ref_img}:{this_img}']**2)
+                            weight.append(self._avg[f'{ref_img}:{this_img}']** 2)
+                            temp_qual.append(pos_quality[ref_img])
+                            prov_im.append(ref_img)
                         else:
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0] + self._sign[f'{ref_img}:{this_img}'] * default_desp[0]
+                                abs_pos[ref_img, 0] +  default_desp[0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1] + self._sign[f'{ref_img}:{this_img}'] * default_desp[1]
+                                abs_pos[ref_img, 1] +  default_desp[1]
                             )
                             temp_err.append(default_err ** 2)
-                            weight.append(0.01 ** 2) # artificially low weight
+                            weight.append(0.01 ** 2)  # artificially low weight
+                            temp_qual.append(0.1)
+                            prov_im.append(-1.0*ref_img)
+
+                weight = np.array(weight) * np.array(temp_qual)
 
                 abs_pos[this_img, 0] = int(np.round(
-                    (np.array(temp_pos[0])*np.array(weight)).sum() / np.array(weight).sum()
+                    (np.array(temp_pos[0])*weight).sum() / weight.sum()
                 ))
                 abs_pos[this_img, 1] = int(np.round(
-                    (np.array(temp_pos[1])*np.array(weight)).sum() / np.array(weight).sum()
+                    (np.array(temp_pos[1])*weight).sum() / weight.sum()
                 ))
-                abs_err[this_img] = np.sqrt((np.array(temp_err) * np.array(weight)).sum() / np.array(weight).sum())
+                abs_err[this_img] = np.sqrt((np.array(temp_err) * weight).sum() / weight.sum())
                 # this image has been fixed
                 fixed_pos.append(this_img)
+                pos_quality[this_img] = np.mean(temp_qual)
                 done += 1
+                
+                prov_str=''
+                for im_temp in prov_im:
+                    prov_str += '{0:+02d}'.format(int(im_temp))
+                log.debug(
+                    'Done Img %d from %s with quality %f',
+                    this_img, prov_str, np.mean(temp_qual)
+                )
             if done == len(dx0):
                 break
 
         self._section.attrs['abs_pos'] = abs_pos.tolist()
+        self._section.attrs['pos_quality'] = pos_quality.tolist()
         return abs_pos, abs_err
 
     def stitch(self):
