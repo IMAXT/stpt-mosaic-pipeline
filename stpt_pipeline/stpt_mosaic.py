@@ -505,11 +505,9 @@ class Section:
         conf = self.get_distconf()
 
         results = []
-        # only one slice
-        # for sl in range(self.slices):
-        for sl in range(1):
-            # for ch in range(self.channels):
-            for ch in [3]:
+        #
+        for sl in range(self.slices):
+            for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch + 1)
                 out = f'{self.path}/mosaic/z={sl}/channel={ch+1}'
                 res = _mosaic(im_t, conf, abs_pos, abs_err, out=out)
