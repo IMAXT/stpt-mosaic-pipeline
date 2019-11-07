@@ -58,21 +58,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None):
         xslice = slice(x0, x0 + im_t[i].shape[0])
         yslice = slice(y0, y0 + im_t[i].shape[1])
 
-        log.debug('i: %d x:%d y:%d sx:%d sy:%d', i, x0, y0,
-            xslice.stop - xslice.start,
-            yslice.stop - yslice.start
-        )
-        try:
-            big_picture[xslice, yslice] += im_t[i][:]
-            overlap[xslice, yslice] += conf[:]
-            pos_err[xslice, yslice] += abs_err[i]
-        except:
-            log.debug('Failed adding image %d',i)
-            log.debug('Image size %d, %d', im_t[i].shape[0], im_t[i].shape[1])
-            log.debug('Mosaic size: %dx%d', x_size, y_size)
-            log.debug('Large Image Size: %dx%d', big_picture.shape[0],big_picture.shape[1])
-            log.debug('X c:%d, s:%d',xslice.start, xslice.stop - xslice.start)
-            log.debug('Y c:%d, s:%d',yslice.start, yslice.stop - yslice.start)
+        big_picture[xslice, yslice] += im_t[i][:]
+        overlap[xslice, yslice] += conf[:]
+        pos_err[xslice, yslice] += abs_err[i]
+
     return out
 
 

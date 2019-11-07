@@ -217,7 +217,7 @@ def preprocess(root_dir: Path, flat_file: Path, output_dir: Path):
     groups = list(z.groups())
 
     dirs = list_directories(root_dir)
-    for d in dirs[:1]:
+    for d in dirs:
         # TODO: All this should be metadata
         log.info('Preprocessing %s', d.name)
         section = re.compile(r'\d\d\d\d$').search(d.name).group()
