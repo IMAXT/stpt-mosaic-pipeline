@@ -304,8 +304,36 @@ class Section:
         self._section.attrs['offsets'] = offsets
         del img_cube_mean_std
 
-    def compute_pairs(self):
+    def compute_scale(self):
         """Return the scale of the detector
+        """
+        # Mu to px scale
+        # we remove null theoretical displacements, bad measurements and
+        # the random measured jitter (dx<1000) as these are not supposed to happen,
+        # and they throw the ratio off
+        x_scale = np.median(
+            [
+                m[0] / p[0]
+                for m, p, a in zip(self._mu.values(), self._px.values(), self._avg.values())
+                if (abs(p[0]) < 5000) & (abs(p[0] > 500) & (a > 0.5))
+            ]
+        )
+        y_scale = np.median(
+            [
+                m[1] / p[1]
+                for m, p, a in zip(self._mu.values(), self._px.values(), self._avg.values())
+                if (abs(p[1]) < 5000) & (abs(p[1] > 00) & (a > 0.5))
+            ]
+        )
+
+        log.debug('Scale %f %f', x_scale, y_scale)
+
+        return x_scale, y_scale
+
+
+
+    def compute_pairs(self):
+        """Return the pairs of mags of the detector
         """
         offsets = self['offsets']
         dx, dy = self['XPos'], self['YPos']
@@ -386,6 +414,7 @@ class Section:
         """
         log.info('Processing section %s', self._section.name)
         self.compute_pairs()
+        scale_x, scale_y = self.compute_scale()
 
         img_cube = self.get_img_section(0, 1)
         img_cube_stack = da.stack(img_cube)
@@ -432,17 +461,34 @@ class Section:
                             default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
-                            default_err = dev_x
+                            # only differences in the long displacement 
+                            # matter to see whether find_disp worked or not,
+                            # as sometimes there are systematic differences in
+                            # the other direction
+                            err_px = np.sqrt(
+                                (
+                                    self._px[f'{ref_img}:{this_img}'][0] -
+                                    self._mu[f'{ref_img}:{this_img}'][0] / scale_x
+                                )** 2
+                            )
                         else:
                             default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
-                            default_err = dev_y
+                            # In the first column the displacement 
+                            # is offset from the rest of the sample by an unknown
+                            # amount, so it is better to keep what is in the mosaic
+                            if (dy0[ref_img] == 0.0) | (dy0[this_img] == 0.0):
+                                default_desp[1] = self._mu[f'{ref_img}:{this_img}'][1] / scale_y
 
-                        err_px = np.sqrt((self._px[f'{ref_img}:{this_img}'][0] - default_desp[0])** 2
-                                + (self._px[f'{ref_img}:{this_img}'][1] - default_desp[1])** 2)
+                            err_px = np.sqrt(
+                            (
+                                self._px[f'{ref_img}:{this_img}'][1] -
+                                self._mu[f'{ref_img}:{this_img}'][1] / scale_y
+                            )** 2
+                        )
                                 
-                        if err_px < default_err * 5.0:
+                        if err_px < Settings.allowed_error_px:
                             # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
                                 abs_pos[ref_img, 0] + self._px[f'{ref_img}:{this_img}'][0]
@@ -462,7 +508,7 @@ class Section:
                             temp_pos[1].append(
                                 abs_pos[ref_img, 1] +  default_desp[1]
                             )
-                            temp_err.append(default_err ** 2)
+                            temp_err.append(Settings.allowed_error_px ** 2)
                             weight.append(0.01 ** 2)  # artificially low weight
                             temp_qual.append(0.1)
                             prov_im.append(-1.0*ref_img)

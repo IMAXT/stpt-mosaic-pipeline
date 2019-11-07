@@ -30,3 +30,5 @@ class Settings:
     ftol_desp = 0.1  # relative tolerance for convergence when calculating offsets
 
     mosaic_scale = 5.55  # mosaic displacement units to pixel
+
+    allowed_error_px = 5. # allowed pixel difference when comparing measured disp with mosaic
