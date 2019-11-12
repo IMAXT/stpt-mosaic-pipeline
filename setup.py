@@ -16,6 +16,7 @@ requirements = [
     'numpy',
     'scipy',
     'voluptuous',
+    'xarray>=0.14',
 ]
 
 setup_requirements = ['pytest-runner', 'flake8']
