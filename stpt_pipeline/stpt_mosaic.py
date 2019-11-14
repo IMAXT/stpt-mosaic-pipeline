@@ -95,6 +95,8 @@ class Section:
 
     @property
     def shape(self) -> Tuple[int, int]:
+        """Mosaic shape in rows and columns
+        """
         ncols = len(self._section.x)
         nrows = len(self._section.y)
         return (nrows, ncols)

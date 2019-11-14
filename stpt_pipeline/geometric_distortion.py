@@ -18,18 +18,17 @@ from .utils import get_coords
 log = logging.getLogger('owl.daemon.pipeline')
 
 
-def read_flatfield(flat_file: Path) -> da.Array:
+def read_flatfield(flat_file: Path) -> xr.DataArray:
     """Read stored flatfield image.
 
     Parameters
     ----------
     flat_file
-        Full path to flatfield image in npy format.
+        full path to flatfield image in npy format.
 
     Returns
     -------
-    [type]
-        [description]
+    array containing flat field image
 
     Notes
     -----
@@ -62,6 +61,21 @@ def read_flatfield(flat_file: Path) -> da.Array:
 def apply_geometric_transform(
     img: da.Array, flat: da.Array, cof_dist: Dict[str, List[float]]
 ) -> da.Array:
+    """Apply geometric transformation to array
+
+    Parameters
+    ----------
+    img
+        Input image
+    flat
+        flat field image
+    cof_dist
+        Distortion coefficients
+
+    Returns
+    -------
+    distortion corrected array
+    """
     norm = da.flipud(img / flat)
     masked = delayed(mask_image)(norm)
     masked = da.from_delayed(masked, shape=norm.shape, dtype='float32')
@@ -128,6 +142,19 @@ def _write_dataset(arr, flat, *, output, cof_dist):
 
 
 def distort(input: Path, flat_file: Path, output: Path, nparallel: int = 10):
+    """Apply optical distortion to dataset.
+
+    Parameters
+    ----------
+    input
+        path to Xarray dataset in Zarr format
+    flat_file
+        path to flatfield
+    output
+        name of output file
+    nparallel
+        number of sections to run in parallel
+    """
     client = Client.current()
     ds = xr.Dataset()
     ds.to_zarr(output, mode='w')

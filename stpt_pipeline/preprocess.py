@@ -86,7 +86,10 @@ def _write_dataset(s, *, input_dir, output):
 
 def preprocess(input_dir: Path, output: Path, nparallel: int = 2):
     """Convert input OME-TIFF format to Xarray
-    
+
+    Read all files for each section and write an Xarr using
+    the Zarr backend.
+
     Parameters
     ----------
     input_dir
@@ -94,7 +97,7 @@ def preprocess(input_dir: Path, output: Path, nparallel: int = 2):
     output
         Output directory
     nparallel
-        number of samples to run in parallel
+        number of sections to run in parallel
     """
     ds = xr.Dataset()
     ds.to_zarr(output, mode='w')
