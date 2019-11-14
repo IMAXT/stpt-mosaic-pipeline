@@ -1,4 +1,5 @@
 import logging
+import traceback
 from pathlib import Path
 from typing import Tuple
 
@@ -53,9 +54,12 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
         xslice = slice(x0, x0 + im_t[i].shape[0])
         yslice = slice(y0, y0 + im_t[i].shape[1])
 
-        big_picture[xslice, yslice] += im_t[i][:]
-        overlap[xslice, yslice] += conf[:]
-        pos_err[xslice, yslice] += abs_err[i]
+        try:
+            big_picture[xslice, yslice] += im_t[i][:]
+            overlap[xslice, yslice] += conf[:]
+            pos_err[xslice, yslice] += abs_err[i]
+        except ValueError:
+            log.error(traceback.format_exc())
 
     return out
 
