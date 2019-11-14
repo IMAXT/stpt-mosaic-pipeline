@@ -59,7 +59,7 @@ def defringe(img):
     return fr_img
 
 
-def preformat_image(x, flat=1, norm_val=10000.):
+def mask_image(img):
     """[summary]
 
     This function transform the raw images into the ones used
@@ -79,8 +79,7 @@ def preformat_image(x, flat=1, norm_val=10000.):
     """
     x_min, x_max = Settings.x_min, Settings.x_max
     y_min, y_max = Settings.y_min, Settings.y_max
-    res = np.flipud(x / flat) / norm_val
-    mask = np.zeros_like(res)
+    mask = np.zeros_like(img)
     mask[x_min:x_max, y_min:y_max] = 1
-    res = res * mask
+    res = img * mask
     return res
