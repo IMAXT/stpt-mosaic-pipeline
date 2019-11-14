@@ -166,7 +166,7 @@ class Section:
         dy0 = np.round((dy - dy.min()) / delta_y).astype(int)
         return (dx0, dy0)
 
-    def get_mos_pos(self) -> Tuple[np.ndarray]:
+    def get_mos_pos(self) -> np.ndarray:
         """Find the mosaic grid
 
         Returns
@@ -174,11 +174,8 @@ class Section:
         dx, dy
             Coordinates of each image in mosaic units
         """
-
-        dx = np.array(self['XPos'])
-        dy = np.array(self['YPos'])
-
-        return (dx, dy)
+        dx, dy = self['XPos'], self['YPos']
+        return np.stack((dx, dy))
 
     def find_orientation(self, dx1: int, dy1: int, dx2: int, dy2: int) -> str:
         """Find the relative orientation between grid positions of two images
