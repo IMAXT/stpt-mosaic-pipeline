@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from typing import Dict
 
+from .geometric_distortion import distort
 from .preprocess import preprocess
 from .settings import Settings
 from .stpt_mosaic import STPTMosaic
@@ -23,10 +24,17 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path, cof_dist: Dict) -
     """
     Settings.cof_dist = cof_dist
 
-    z = preprocess(root_dir, flat_file, output_dir)
+    # TODO: This to me moved outside the pipeline
+    out = f'{output_dir / root_dir.name}.zarr'
+    preprocess(root_dir, out)
 
-    mos = STPTMosaic(z)
+    # Geometric distortion
+    out_dis = f'{output_dir / root_dir.name}_dis.zarr'
+    distort(out, flat_file, out_dis)
+
+    mos = STPTMosaic(out_dis)
+    mos.initialize_storage(f'{output_dir / root_dir.name}')
 
     for section in mos.sections():
         section.find_offsets()
-        section.stitch()
+        section.stitch(f'{output_dir / root_dir.name}')
