@@ -99,14 +99,6 @@ class Section:
         nrows = len(self._section.y)
         return (nrows, ncols)
 
-    def save_image(self, arr, group, imgtype='raw'):
-        g = self._section.require_group(group)
-        try:
-            g.create_dataset(imgtype, data=arr)
-        except ValueError:
-            g[imgtype] = arr
-        log.info('Image %s/%s created', group, imgtype)
-
     @property
     def fovs(self) -> int:
         """Number of field of views.
@@ -176,34 +168,6 @@ class Section:
         """
         dx, dy = self['XPos'], self['YPos']
         return np.stack((dx, dy))
-
-    def find_orientation(self, dx1: int, dy1: int, dx2: int, dy2: int) -> str:
-        """Find the relative orientation between grid positions of two images
-
-        Parameters
-        ----------
-        dx1
-            X grid position of first image
-        dy1
-            Y grid position of first image
-        dx2
-            X grid position of second image
-        dy2
-            Y grid position of second image
-
-        Returns
-        -------
-        Relative position
-        """
-        if abs(dx1 - dx2) > abs(dy1 - dy2):
-            orientation = 'x'
-            if dx1 > dx2:
-                orientation = f'-{orientation}'
-        else:
-            orientation = 'y'
-            if dy1 > dy2:
-                orientation = f'-{orientation}'
-        return orientation
 
     def get_distconf(self):
         conf = da.ones(self.shape)
