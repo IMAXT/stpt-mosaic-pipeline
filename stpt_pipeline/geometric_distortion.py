@@ -10,6 +10,7 @@ import xarray as xr
 from dask import delayed
 from distributed import Client, as_completed
 
+from .retry import retry
 from .settings import Settings
 from .stpt_displacement import mask_image
 from .utils import get_coords
@@ -84,6 +85,7 @@ def apply_geometric_transform(
     return res
 
 
+@retry(Exception)
 def _write_dataset(arr, flat, *, output, cof_dist):
     log.debug('Applying optical distortion and normalization %s', arr.name)
     g = xr.Dataset()
