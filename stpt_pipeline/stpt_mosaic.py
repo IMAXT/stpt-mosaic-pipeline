@@ -40,7 +40,7 @@ def _get_image(group, imgtype, shape):
 @delayed
 def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
     y_size, x_size = out_shape
-    x_delta, y_delta = np.min(abs_pos, axis=0)
+    y_delta, x_delta = np.min(abs_pos, axis=0)
 
     log.debug('Mosaic size: %dx%d', x_size, y_size)
 
@@ -49,15 +49,15 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
     pos_err = _get_image(out, 'pos_err', (y_size, x_size))
 
     for i in range(len(im_t)):
-        x0 = int(abs_pos[i, 0] - x_delta)
-        y0 = int(abs_pos[i, 1] - y_delta)
-        xslice = slice(x0, x0 + im_t[i].shape[0])
-        yslice = slice(y0, y0 + im_t[i].shape[1])
+        y0 = int(abs_pos[i, 0] - y_delta)
+        x0 = int(abs_pos[i, 1] - x_delta)
+        yslice = slice(y0, y0 + im_t[i].shape[0])
+        xslice = slice(x0, x0 + im_t[i].shape[1])
 
         try:
-            big_picture[xslice, yslice] += im_t[i][:]
-            overlap[xslice, yslice] += conf[:]
-            pos_err[xslice, yslice] += abs_err[i]
+            big_picture[yslice, xslice] += im_t[i][:]
+            overlap[yslice, xslice] += conf[:]
+            pos_err[yslice, xslice] += abs_err[i]
         except ValueError:
             log.error(traceback.format_exc())
 
