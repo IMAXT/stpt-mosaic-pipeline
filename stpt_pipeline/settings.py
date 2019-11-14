@@ -19,16 +19,26 @@ class Settings:
     x_max = 2080
     y_min = 80
     y_max = 1990
-    norm_val = 10000.0
+    norm_val = 10_000
     do_flat = True
     do_defringe = False
     channel_to_use = 4
+    """Channel to use to calculate offsets
+    """
+
     cof_dist = None
+    """distortion coefficients (filled in from the configuration at runtime)
+    """
+
     normal_x = 1000
     normal_y = 1000
 
-    ftol_desp = 0.1  # relative tolerance for convergence when calculating offsets
+    ftol_desp = 0.1
+    """Relative tolerance for convergence when calculating offsets
+    """
 
     mosaic_scale = 5.55  # mosaic displacement units to pixel
 
-    allowed_error_px = 5. # allowed pixel difference when comparing measured disp with mosaic
+    allowed_error_px = 5
+    """allowed pixel difference when comparing measured disp with mosaic
+    """
