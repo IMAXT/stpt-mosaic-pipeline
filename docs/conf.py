@@ -21,8 +21,6 @@
 import os
 import sys
 
-import sphinx.apidoc
-
 import stpt_pipeline
 
 sys.path.insert(0, os.path.abspath('..'))
@@ -172,4 +170,3 @@ texinfo_documents = [
         'Miscellaneous',
     )
 ]
-
