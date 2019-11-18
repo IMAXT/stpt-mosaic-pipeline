@@ -7,8 +7,7 @@ name: stpt
 
 # Pipeline arguments
 root_dir: /data/meds1_a/imaxtapp/incoming/FQ1-0001/STPT/FQ1-190509-1508
-output_dir: /cache/imaxt/stpt
-# output_dir: /data/meds1_b/eglez/imaxt/stpt
+output_dir: /data/meds1_b/eglez/imaxt/stpt
 flat_file: /data/meds1_a/eglez/imaxt/flat.nc
 
 cof_dist:
