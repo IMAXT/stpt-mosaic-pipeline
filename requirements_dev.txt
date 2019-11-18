@@ -1,6 +1,6 @@
 autopep8
 coverage
-black
+black==19.10b0.imaxt
 pylint
 flake8
 flake8-bugbear
