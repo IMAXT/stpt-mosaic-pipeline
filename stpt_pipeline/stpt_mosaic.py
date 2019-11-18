@@ -26,10 +26,10 @@ def _sink(*args):
 
 
 @retry(Exception)
-def _get_image(group, imgtype, shape):
+def _get_image(group, imgtype, shape, dtype='float32'):
     try:
         arr = group.create_dataset(
-            imgtype, shape=shape, chunks=(2080, 2080), dtype='float32'
+            imgtype, shape=shape, chunks=(2080, 2080), dtype=dtype
         )
     except ValueError:
         arr = group[imgtype]
@@ -45,7 +45,7 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
     log.debug('Mosaic size: %dx%d', x_size, y_size)
 
     big_picture = _get_image(out, 'raw', (y_size, x_size))
-    overlap = _get_image(out, 'overlap', (y_size, x_size))
+    overlap = _get_image(out, 'overlap', (y_size, x_size), dtype='uint8')
     pos_err = _get_image(out, 'pos_err', (y_size, x_size))
 
     for i in range(len(im_t)):
@@ -174,7 +174,7 @@ class Section:
     def get_distconf(self):
         conf = da.ones(self.shape)
         res = apply_geometric_transform(conf, 1.0, Settings.cof_dist)
-        return res
+        return res.astype('uint8')
 
     def find_offsets(self):
         """Calculate offsets between all pairs of overlapping images
@@ -212,7 +212,7 @@ class Section:
 
                 # trying to do always positive displacements
 
-                if (desp[0] < -1000) | (desp[1] < -1000):
+                if (desp[0] < -1000) or (desp[1] < -1000):
                     desp[0] *= -1
                     desp[1] *= -1
                     obj_img = i
@@ -245,23 +245,24 @@ class Section:
         for fut in as_completed(futures):
             i, j, res, sign = fut.result()
             dx, dy, mi, npx = res.x, res.y, res.mi, res.avg_flux
-            offsets.append([i, j, dy, dx, npx, mi, sign])
+            offsets.append([i, j, res, sign])
             log.info(
                 'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d',
                 self._section.name,
                 i,
                 j,
-                dy,
                 dx,
+                dy,
                 mi,
                 npx,
                 sign,
             )
 
-        self._section.attrs['offsets'] = offsets
+        self._offsets = offsets
 
-    def compute_scale(self):
-        """Return the scale of the detector
+    @property
+    def scale(self) -> Tuple[float]:
+        """Scale of the detector in pixels per micron
         """
         # Mu to px scale
         # we remove null theoretical displacements, bad measurements and
@@ -282,18 +283,18 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[1]) < 5000) & (abs(p[1] > 00) & (a > 0.5))
+                if (abs(p[1]) < 5000) & (abs(p[1] > 500) & (a > 0.5))
             ]
         )
 
         log.debug('Scale %f %f', x_scale, y_scale)
 
-        return x_scale, y_scale
+        return (x_scale, y_scale)
 
     def compute_pairs(self):
         """Return the pairs of mags of the detector
         """
-        offsets = self['offsets']
+        offsets = self._offsets
         dx, dy = self['XPos'], self['YPos']
 
         px = {}
@@ -301,18 +302,18 @@ class Section:
         mi = {}
         avg_flux = {}
 
-        for o in offsets:
-            px[f'{o[0]}:{o[1]}'] = o[2:4]
-            px[f'{o[1]}:{o[0]}'] = [-1.0 * o[2], -1.0 * o[3]]
+        for i, j, res, _sign in offsets:
+            px[f'{i}:{j}'] = [res.y, res.x]
+            px[f'{j}:{i}'] = [-res.y, -res.x]
 
-            mu[f'{o[0]}:{o[1]}'] = [dx[o[1]] - dx[o[0]], dy[o[1]] - dy[o[0]]]
-            mu[f'{o[1]}:{o[0]}'] = [dx[o[0]] - dx[o[1]], dy[o[0]] - dy[o[1]]]
+            mu[f'{i}:{j}'] = [dx[j] - dx[i], dy[j] - dy[i]]
+            mu[f'{j}:{i}'] = [dx[i] - dx[j], dy[i] - dy[j]]
 
-            mi[f'{o[0]}:{o[1]}'] = o[-2]
-            mi[f'{o[1]}:{o[0]}'] = o[-2]
+            mi[f'{i}:{j}'] = res.mi
+            mi[f'{j}:{i}'] = res.mi
 
-            avg_flux[f'{o[0]}:{o[1]}'] = o[-3]
-            avg_flux[f'{o[1]}:{o[0]}'] = o[-3]
+            avg_flux[f'{i}:{j}'] = res.avg_flux
+            avg_flux[f'{j}:{i}'] = res.avg_flux
 
         self._px, self._mu = px, mu
         self._mi, self._avg = mi, avg_flux
@@ -324,34 +325,35 @@ class Section:
         the average flux in the overlap region
         """
 
-        offsets = self['offsets']
+        offsets = self._offsets
 
-        px_x = np.zeros(len(offsets))
-        px_y = np.zeros(len(offsets))
-        avg_flux = np.zeros(len(offsets))
-        for o in range(len(offsets)):
-            px_x[o] = offsets[o][2]
-            px_y[o] = offsets[o][3]
-            avg_flux[o] = offsets[o][-2]
+        px_x = np.empty(len(offsets))
+        px_y = np.empty(len(offsets))
+        avg_flux = np.empty(len(offsets))
+        for i, offset in enumerate(offsets):
+            _i, _j, res, _sign = offset
+            px_y[i] = res.y
+            px_x[i] = res.x
+            avg_flux[i] = res.avg_flux
 
-        ii = np.where(
-            (np.abs(px_y) < 1000)
-            & (np.abs(px_x) > 1000)
-            & (avg_flux > np.median(avg_flux))
-        )[0]
-        default_x = [
-            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (px_y[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-        ]
-        dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
         ii = np.where(
             (np.abs(px_x) < 1000)
             & (np.abs(px_y) > 1000)
             & (avg_flux > np.median(avg_flux))
         )[0]
-        default_y = [
-            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+        default_x = [
             (px_y[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+        ]
+        dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
+        ii = np.where(
+            (np.abs(px_y) < 1000)
+            & (np.abs(px_x) > 1000)
+            & (avg_flux > np.median(avg_flux))
+        )[0]
+        default_y = [
+            (px_y[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -370,12 +372,12 @@ class Section:
 
         return default_x, dev_x, default_y, dev_y
 
-    def compute_abspos(self):
+    def compute_abspos(self):  # noqa: C901
         """Compute absolute positions of images in the field of view.
         """
         log.info('Processing section %s', self._section.name)
         self.compute_pairs()
-        scale_x, scale_y = self.compute_scale()
+        scale_x, scale_y = self.scale
 
         img_cube = self.get_img_section(0, 1)
         img_cube_stack = da.stack(img_cube)
@@ -571,7 +573,7 @@ class Section:
                 'x': range(nx),
                 'y': range(ny),
                 'z': range(nz),
-                'channel': range(nch),
+                'channel': range(nch + 1)[1:],
             },
         )
 
