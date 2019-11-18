@@ -11,8 +11,8 @@ with open('HISTORY.rst') as history_file:
 requirements = [
     'dask',
     'distributed',
-    'imaxt-image',
-    'zarr',
+    'imaxt-image>=0.13',
+    'zarr==2.3.2.imaxt',
     'numpy',
     'scipy',
     'voluptuous',
@@ -52,4 +52,8 @@ setup(
     url='https://gitlab.ast.cam.ac.uk/imaxt/stpt_pipeline',
     version='0.1.0',
     zip_safe=False,
+    dependency_links=[
+        'https://imaxt.ast.cam.ac.uk/pip/imaxt-image',
+        'https://imaxt.ast.cam.ac.uk/pip/zarr',
+    ],
 )
