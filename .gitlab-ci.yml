@@ -30,6 +30,6 @@ deploy:
     - pip install --user imaxt-image
     - python setup.py sdist
     - curl -X MKCOL $REPO/stpt_pipeline
-    - curl -XPUT $REPO/stpt_pipeline/stpt_pipeline-0.1.0.tar.gz --data-binary @dist/stpt_pipeline-0.1.0.tar.gz
+    - curl -XPUT $REPO/stpt_pipeline/stpt_pipeline-0.2.0.tar.gz --data-binary @dist/stpt_pipeline-0.2.0.tar.gz
 
 
