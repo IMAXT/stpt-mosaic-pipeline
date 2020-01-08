@@ -15,13 +15,11 @@ class Settings:
 
     """
 
-    x_min = 2
-    x_max = 2080
-    y_min = 80
-    y_max = 1990
+    x_min = 12
+    x_max = 2078
+    y_min = 72
+    y_max = 2007
     norm_val = 10_000
-    do_flat = True
-    do_defringe = False
     channel_to_use = 4
     """Channel to use to calculate offsets
     """

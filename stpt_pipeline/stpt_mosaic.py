@@ -173,7 +173,7 @@ class Section:
 
     def get_distconf(self):
         conf = da.ones(self.shape)
-        res = apply_geometric_transform(conf, 1.0, Settings.cof_dist)
+        res = apply_geometric_transform(conf, 0.0, 1.0, Settings.cof_dist)
         return res.astype('uint8')
 
     def find_offsets(self):
@@ -238,6 +238,7 @@ class Section:
                 res = delayed(find_overlap_conf)(
                     im_ref.data, im_obj.data, dist_conf, dist_conf, desp
                 )
+
                 results.append(_sink(ref_img, obj_img, res, sign))
 
         futures = client.compute(results)

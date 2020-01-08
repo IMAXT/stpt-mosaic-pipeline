@@ -10,7 +10,14 @@ from .stpt_mosaic import STPTMosaic
 log = logging.getLogger('owl.daemon.pipeline')
 
 
-def main(*, root_dir: Path, flat_file: Path, output_dir: Path, cof_dist: Dict) -> None:
+def main(
+    *,
+    root_dir: Path,
+    dark_file: Path,
+    flat_file: Path,
+    output_dir: Path,
+    cof_dist: Dict,
+) -> None:
     """[summary]
 
     Parameters
@@ -28,9 +35,11 @@ def main(*, root_dir: Path, flat_file: Path, output_dir: Path, cof_dist: Dict) -
     out = f'{output_dir / root_dir.name}.zarr'
     preprocess(root_dir, out)
 
+    #  Compute dark and flat
+
     # Geometric distortion
     out_dis = f'{output_dir / root_dir.name}_dis.zarr'
-    distort(out, flat_file, out_dis)
+    distort(out, dark_file, flat_file, out_dis)
 
     mos = STPTMosaic(out_dis)
     mos.initialize_storage(f'{output_dir / root_dir.name}')

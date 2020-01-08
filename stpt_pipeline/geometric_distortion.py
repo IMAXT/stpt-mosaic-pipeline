@@ -18,7 +18,7 @@ from .utils import get_coords
 log = logging.getLogger('owl.daemon.pipeline')
 
 
-def read_flatfield(flat_file: Path) -> xr.DataArray:
+def read_calib(cal_file: Path) -> xr.DataArray:
     """Read stored flatfield image.
 
     Parameters
@@ -49,17 +49,13 @@ def read_flatfield(flat_file: Path) -> xr.DataArray:
         arr.to_netcdf('flat.nc')
 
     """
-    log.info('Reading flatfield %s', flat_file)
-    if Settings.do_flat:
-        flat = xr.open_dataarray(f'{flat_file}')
-        nflat = flat[Settings.channel_to_use - 1]
-    else:
-        nflat = 1.0
-    return nflat
+    log.info('Reading calibration file %s', cal_file)
+    cal = xr.open_dataarray(f'{cal_file}')
+    return da.from_array(cal.values)
 
 
 def apply_geometric_transform(
-    img: da.Array, flat: da.Array, cof_dist: Dict[str, List[float]]
+    img: da.Array, dark: da.Array, flat: da.Array, cof_dist: Dict[str, List[float]]
 ) -> da.Array:
     """Apply geometric transformation to array
 
@@ -76,7 +72,7 @@ def apply_geometric_transform(
     -------
     distortion corrected array
     """
-    norm = da.flipud(img / flat)
+    norm = da.flipud((img - dark) / da.clip(flat, 1e-6, 1e6))
     masked = delayed(mask_image)(norm)
     masked = da.from_delayed(masked, shape=norm.shape, dtype='float32')
     new = delayed(ndimage.geometric_transform)(
@@ -100,20 +96,20 @@ def apply_geometric_transform(
 
 
 @retry(Exception)
-def _write_dataset(arr, flat, *, output, cof_dist):
+def _write_dataset(arr, *, dark, flat, output, cof_dist):
     log.debug('Applying optical distortion and normalization %s', arr.name)
     g = xr.Dataset()
     tiles = []
     for i in arr.tile:
         channels = []
         for j in arr.channel:
+            im = arr.sel(tile=i, channel=j) / Settings.norm_val
+            n = int(j.values)
+            d = dark[n] / Settings.norm_val
+            f = flat[n]
             img = da.stack(
                 [
-                    apply_geometric_transform(
-                        arr.sel(tile=i, channel=j, z=k).data / Settings.norm_val,
-                        flat,
-                        cof_dist,
-                    )
+                    apply_geometric_transform(im.sel(z=k).data, d, f, cof_dist,)
                     for k in arr.z
                 ]
             )
@@ -141,7 +137,9 @@ def _write_dataset(arr, flat, *, output, cof_dist):
     return f'{output}[{arr.name}]'
 
 
-def distort(input: Path, flat_file: Path, output: Path, nparallel: int = 10):
+def distort(
+    input: Path, dark_file: Path, flat_file: Path, output: Path, nparallel: int = 10
+):
     """Apply optical distortion to dataset.
 
     Parameters
@@ -158,12 +156,15 @@ def distort(input: Path, flat_file: Path, output: Path, nparallel: int = 10):
     client = Client.current()
     ds = xr.Dataset()
     ds.to_zarr(output, mode='w')
-    flat = read_flatfield(flat_file).persist()
+    flat = read_calib(flat_file).persist()
+    dark = read_calib(dark_file).persist()
     ds = xr.open_zarr(input)
     sections = list(ds)
 
     j = nparallel if len(sections) > nparallel else len(sections)
-    func = partial(_write_dataset, flat=flat, output=output, cof_dist=Settings.cof_dist)
+    func = partial(
+        _write_dataset, dark=dark, flat=flat, output=output, cof_dist=Settings.cof_dist
+    )
     futures = client.map(func, [ds[sections[n]] for n in range(j)])
 
     seq = as_completed(futures)

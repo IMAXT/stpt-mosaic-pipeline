@@ -12,6 +12,7 @@ schema = vo.Schema(
         vo.Required('root_dir'): vo.Coerce(Path),
         vo.Required('output_dir'): vo.Coerce(Path),
         vo.Required('flat_file'): vo.Coerce(Path),
+        vo.Required('dark_file'): vo.Coerce(Path),
         vo.Required('cof_dist'): cof_dist_schema,
     }
 )
