@@ -84,7 +84,7 @@ def _write_dataset(s, *, input_dir, output):
     return f'{output}[{s.name}]'
 
 
-def preprocess(input_dir: Path, output: Path, nparallel: int = 2):
+def preprocess(input_dir: Path, output: Path, nparallel: int = 1):
     """Convert input OME-TIFF format to Xarray
 
     Read all files for each section and write an Xarr using

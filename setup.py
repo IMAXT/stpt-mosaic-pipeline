@@ -12,7 +12,7 @@ requirements = [
     'dask',
     'distributed',
     'imaxt-image>=0.13',
-    'zarr==2.3.2.imaxt',
+    'zarr',
     'numpy',
     'scipy',
     'voluptuous',

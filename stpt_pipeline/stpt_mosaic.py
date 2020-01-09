@@ -3,6 +3,7 @@ import traceback
 from pathlib import Path
 from typing import Tuple
 
+import cv2
 import dask.array as da
 import numpy as np
 import xarray as xr
@@ -13,7 +14,7 @@ from scipy.stats import median_absolute_deviation as mad
 
 from imaxt_image.registration import find_overlap_conf
 
-from .geometric_distortion import apply_geometric_transform
+from .geometric_distortion import apply_geometric_transform, read_calib
 from .retry import retry
 from .settings import Settings
 
@@ -39,14 +40,16 @@ def _get_image(group, imgtype, shape, dtype='float32'):
 
 @delayed
 def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
+    assert out_shape is not None
+    assert out is not None
     y_size, x_size = out_shape
     y_delta, x_delta = np.min(abs_pos, axis=0)
 
     log.debug('Mosaic size: %dx%d', x_size, y_size)
 
-    big_picture = _get_image(out, 'raw', (y_size, x_size))
-    overlap = _get_image(out, 'overlap', (y_size, x_size), dtype='uint8')
-    pos_err = _get_image(out, 'pos_err', (y_size, x_size))
+    big_picture = _get_image(out, 'raw', (y_size, x_size), dtype='uint16')
+    overlap = _get_image(out, 'overlap', (y_size, x_size), dtype='uint16')
+    pos_err = _get_image(out, 'pos_err', (y_size, x_size), dtype='uint16')
 
     for i in range(len(im_t)):
         y0 = int(abs_pos[i, 0] - y_delta)
@@ -55,9 +58,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
         xslice = slice(x0, x0 + im_t[i].shape[1])
 
         try:
-            big_picture[yslice, xslice] += im_t[i][:]
-            overlap[yslice, xslice] += conf[:]
-            pos_err[yslice, xslice] += abs_err[i]
+            mos = (1 + im_t[i] * conf)
+            big_picture[yslice, xslice] += mos.astype('uint16') * 10_000
+            overlap[yslice, xslice] += conf.astype('uint16') * 100
+            pos_err[yslice, xslice] += abs_err[i].astype('uint16') * 100
         except ValueError:
             log.error(traceback.format_exc())
 
@@ -172,7 +176,10 @@ class Section:
         return np.stack((dx, dy))
 
     def get_distconf(self):
-        conf = da.ones(self.shape)
+        # TODO: get name from somewhere
+        flat = read_calib('/data/meds1_a/eglez/imaxt/flat_dev.nc')
+        flat = flat[Settings.channel_to_use - 1]
+        conf = da.where((flat < 0.3) | (flat > 5), 0, 1)
         res = apply_geometric_transform(conf, 0.0, 1.0, Settings.cof_dist)
         return res.astype('uint8')
 
@@ -290,6 +297,7 @@ class Section:
 
         log.debug('Scale %f %f', x_scale, y_scale)
 
+        self._x_scale, self._y_scale = x_scale, y_scale
         return (x_scale, y_scale)
 
     def compute_pairs(self):
@@ -371,6 +379,14 @@ class Section:
             dev_y,
         )
 
+        self._section.attrs['default_displacements'] = [
+            {
+                'default_x': default_x,
+                'dev_x': dev_x,
+                'default_y': default_y,
+                'dev_y': dev_y,
+            }
+        ]
         return default_x, dev_x, default_y, dev_y
 
     def compute_abspos(self):  # noqa: C901
@@ -567,7 +583,7 @@ class Section:
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(
-            mos.astype('float32'),
+            mos.astype('uint16'),
             dims=('type', 'z', 'channel', 'y', 'x'),
             coords={
                 'type': ['mosaic', 'conf', 'err'],
@@ -578,8 +594,59 @@ class Section:
             },
         )
 
+        raw.attrs['default_displacements'] = self._section.attrs[
+            'default_displacements'
+        ]
+        raw.attrs['abs_pos'] = self._section.attrs['abs_pos']
+        raw.attrs['pos_quality'] = self._section.attrs['pos_quality']
+        raw.attrs['offsets'] = self._offsets
+        raw.attrs['scale'] = [self._x_scale, self._y_scale]
+
         ds = xr.Dataset({self._section.name: raw})
         ds.to_zarr(f'{output}_mos.zarr', mode='a')
+
+    def downsample(self, output):
+        up = f'{output}_mos.zarr'
+        for factor in [2, 4, 8, 16]:
+            down = f'{output}_mos{factor}.zarr'
+            ds = xr.open_zarr(up)
+            nds = xr.Dataset()
+            nds.to_zarr(down, 'w')
+
+            for s in list(ds):
+                nds = xr.Dataset()
+                arr = ds[s]
+                nt, nz, nch, ny, nx = tuple(c[0] for c in arr.chunks)
+                arr_t = []
+                for t in arr.type:
+                    arr_z = []
+                    for z in arr.z:
+                        arr_ch = []
+                        for ch in arr.channel:
+                            im = arr.sel(z=z.values, type=t.values, channel=ch.values)
+                            res = im.data.map_blocks(
+                                cv2.pyrDown, chunks=(ny // 2, nx // 2)
+                            )
+                            arr_ch.append(res)
+                        arr_z.append(da.stack(arr_ch))
+                    arr_t.append(da.stack(arr_z))
+                arr_t = da.stack(arr_t)
+                nt, nz, nch, ny, nx = arr_t.shape
+                narr = xr.DataArray(
+                    arr_t,
+                    dims=('type', 'z', 'channel', 'y', 'x'),
+                    coords={
+                        'channel': range(1, nch + 1),
+                        'type': ['mosaic', 'conf', 'err'],
+                        'x': range(nx),
+                        'y': range(ny),
+                        'z': range(nz),
+                    },
+                )
+                nds[s] = narr
+                nds.to_zarr(down, mode='a')
+
+            up = down
 
 
 class STPTMosaic:

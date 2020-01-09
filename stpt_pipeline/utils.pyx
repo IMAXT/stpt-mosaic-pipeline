@@ -1,3 +1,5 @@
+#cython: language_level=3
+
 from libc.math cimport abs
 
 def get_coords(tuple coords, list cof_x, list cof_y, list tan, float normal_x, float normal_y):
