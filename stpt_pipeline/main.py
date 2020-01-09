@@ -47,3 +47,4 @@ def main(
     for section in mos.sections():
         section.find_offsets()
         section.stitch(f'{output_dir / root_dir.name}')
+        section.downsample(f'{output_dir / root_dir.name}')

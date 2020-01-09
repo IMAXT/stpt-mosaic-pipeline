@@ -138,7 +138,7 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
 
 
 def distort(
-    input: Path, dark_file: Path, flat_file: Path, output: Path, nparallel: int = 10
+    input: Path, dark_file: Path, flat_file: Path, output: Path, nparallel: int = 1
 ):
     """Apply optical distortion to dataset.
 
