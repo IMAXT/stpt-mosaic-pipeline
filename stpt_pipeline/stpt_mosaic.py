@@ -183,8 +183,8 @@ class Section:
         # convert to find_shifts
         results = []
         log.info('Processing section %s', self._section.name)
-        # TODO: this has to go in config
-        img_cube = self.get_img_section(0, 3)
+        # TODO: reference channel from config
+        img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
 
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
