@@ -2,7 +2,7 @@ import logging
 import time
 from functools import wraps
 
-log = logging.getLogger('owl.daemon.pipeline')
+log = logging.getLogger("owl.daemon.pipeline")
 
 
 def retry(exceptions, tries=4, delay=3, backoff=2):
@@ -29,7 +29,7 @@ def retry(exceptions, tries=4, delay=3, backoff=2):
                 try:
                     return f(*args, **kwargs)
                 except exceptions as e:
-                    msg = '{}, Retrying in {} seconds...'.format(e, mdelay)
+                    msg = "{}, Retrying in {} seconds...".format(e, mdelay)
                     log.warning(msg)
                     time.sleep(mdelay)
                     mtries -= 1

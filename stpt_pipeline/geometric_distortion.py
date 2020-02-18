@@ -15,7 +15,7 @@ from .settings import Settings
 from .stpt_displacement import mask_image
 from .utils import get_coords
 
-log = logging.getLogger('owl.daemon.pipeline')
+log = logging.getLogger("owl.daemon.pipeline")
 
 
 def read_calib(cal_file: Path) -> xr.DataArray:
@@ -49,8 +49,8 @@ def read_calib(cal_file: Path) -> xr.DataArray:
         arr.to_netcdf('flat.nc')
 
     """
-    log.info('Reading calibration file %s', cal_file)
-    cal = xr.open_dataarray(f'{cal_file}')
+    log.debug("Reading calibration file %s", cal_file)
+    cal = xr.open_dataarray(f"{cal_file}")
     return da.from_array(cal.values)
 
 
@@ -74,30 +74,30 @@ def apply_geometric_transform(
     """
     norm = da.flipud((img - dark) / da.clip(flat, 1e-6, 1e6))
     masked = delayed(mask_image)(norm)
-    masked = da.from_delayed(masked, shape=norm.shape, dtype='float32')
+    masked = da.from_delayed(masked, shape=norm.shape, dtype="float32")
     new = delayed(ndimage.geometric_transform)(
         masked,
         get_coords,
         output_shape=norm.shape,
         extra_arguments=(
-            cof_dist['cof_x'],
-            cof_dist['cof_y'],
-            cof_dist['tan'],
+            cof_dist["cof_x"],
+            cof_dist["cof_y"],
+            cof_dist["tan"],
             Settings.normal_x,
             Settings.normal_y,
         ),
-        mode='constant',
+        mode="constant",
         cval=0.0,
         order=1,
         prefilter=False,
     )
-    res = da.from_delayed(new, shape=norm.shape, dtype='float32')
+    res = da.from_delayed(new, shape=norm.shape, dtype="float32")
     return res
 
 
 @retry(Exception)
 def _write_dataset(arr, *, dark, flat, output, cof_dist):
-    log.debug('Applying optical distortion and normalization %s', arr.name)
+    log.debug("Applying optical distortion and normalization %s", arr.name)
     g = xr.Dataset()
     tiles = []
     for i in arr.tile:
@@ -120,21 +120,21 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
     ntiles, nchannels, nz, ny, nx = tiles.shape
     this = xr.DataArray(
         tiles,
-        dims=('tile', 'channel', 'z', 'y', 'x'),
+        dims=("tile", "channel", "z", "y", "x"),
         name=arr.name,
         coords={
-            'tile': range(ntiles),
-            'channel': range(nchannels),
-            'z': range(nz),
-            'y': range(ny),
-            'x': range(nx),
+            "tile": range(ntiles),
+            "channel": range(nchannels),
+            "z": range(nz),
+            "y": range(ny),
+            "x": range(nx),
         },
     )
     this.attrs = arr.attrs
     g[arr.name] = this
 
-    g.to_zarr(output, mode='a')
-    return f'{output}[{arr.name}]'
+    g.to_zarr(output, mode="a")
+    return f"{output}[{arr.name}]"
 
 
 def distort(
@@ -155,7 +155,7 @@ def distort(
     """
     client = Client.current()
     ds = xr.Dataset()
-    ds.to_zarr(output, mode='w')
+    ds.to_zarr(output, mode="w")
     flat = read_calib(flat_file).persist()
     dark = read_calib(dark_file).persist()
     ds = xr.open_zarr(input)
@@ -170,13 +170,13 @@ def distort(
     seq = as_completed(futures)
     for fut in seq:
         if not fut.exception():
-            log.info('Saved %s', fut.result())
+            log.info("Saved %s", fut.result())
             fut.cancel()
             if j < len(sections):
                 fut = client.submit(func, ds[sections[j]])
                 seq.add(fut)
                 j += 1
         else:
-            log.error('%s', fut.exception())
+            log.error("%s", fut.exception())
             tb = fut.traceback()
             log.error(traceback.format_tb(tb))

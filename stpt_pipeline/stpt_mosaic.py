@@ -18,7 +18,7 @@ from .geometric_distortion import apply_geometric_transform, read_calib
 from .retry import retry
 from .settings import Settings
 
-log = logging.getLogger('owl.daemon.pipeline')
+log = logging.getLogger("owl.daemon.pipeline")
 
 
 @delayed
@@ -27,14 +27,14 @@ def _sink(*args):
 
 
 @retry(Exception)
-def _get_image(group, imgtype, shape, dtype='float32'):
+def _get_image(group, imgtype, shape, dtype="float32"):
     try:
         arr = group.create_dataset(
             imgtype, shape=shape, chunks=(2080, 2080), dtype=dtype
         )
     except ValueError:
         arr = group[imgtype]
-    log.info('Image %s/%s created', arr, imgtype)
+    log.info("Image %s/%s created", arr, imgtype)
     return arr
 
 
@@ -45,11 +45,11 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
     y_size, x_size = out_shape
     y_delta, x_delta = np.min(abs_pos, axis=0)
 
-    log.debug('Mosaic size: %dx%d', x_size, y_size)
+    log.debug("Mosaic size: %dx%d", x_size, y_size)
 
-    big_picture = _get_image(out, 'raw', (y_size, x_size), dtype='uint16')
-    overlap = _get_image(out, 'overlap', (y_size, x_size), dtype='uint16')
-    pos_err = _get_image(out, 'pos_err', (y_size, x_size), dtype='uint16')
+    big_picture = _get_image(out, "raw", (y_size, x_size), dtype="uint16")
+    overlap = _get_image(out, "overlap", (y_size, x_size), dtype="uint16")
+    pos_err = _get_image(out, "pos_err", (y_size, x_size), dtype="uint16")
 
     for i in range(len(im_t)):
         y0 = int(abs_pos[i, 0] - y_delta)
@@ -58,10 +58,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
         xslice = slice(x0, x0 + im_t[i].shape[1])
 
         try:
-            mos = (1 + im_t[i] * conf)
-            big_picture[yslice, xslice] += mos.astype('uint16') * 10_000
-            overlap[yslice, xslice] += conf.astype('uint16') * 100
-            pos_err[yslice, xslice] += abs_err[i].astype('uint16') * 100
+            mos = 1 + im_t[i] * conf
+            big_picture[yslice, xslice] += mos.astype("uint16") * 10_000
+            overlap[yslice, xslice] += conf.astype("uint16") * 100
+            pos_err[yslice, xslice] += abs_err[i].astype("uint16") * 100
         except ValueError:
             log.error(traceback.format_exc())
 
@@ -139,8 +139,8 @@ class Section:
         # by a fixed value, but there's some jitter in the microscope
         # so this finds this delta. It is used later to get the column
         # and row position of each single image
-        dx = np.array(self['XPos'])
-        dy = np.array(self['YPos'])
+        dx = np.array(self["XPos"])
+        dy = np.array(self["YPos"])
 
         r = np.sqrt((dx.astype(float) - dx[0]) ** 2 + (dy.astype(float) - dy[0]) ** 2)
         r[0] = r.max()  # avoiding minimum at itself
@@ -154,7 +154,7 @@ class Section:
 
         delta_x, delta_y = np.max([dx_1, dx_2]), np.max([dy_1, dy_2])
         log.debug(
-            'Section %s delta_x : %s , delta_y: %s',
+            "Section %s delta_x : %s , delta_y: %s",
             self._section.name,
             delta_x,
             delta_y,
@@ -172,16 +172,16 @@ class Section:
         dx, dy
             Coordinates of each image in mosaic units
         """
-        dx, dy = self['XPos'], self['YPos']
+        dx, dy = self["XPos"], self["YPos"]
         return np.stack((dx, dy))
 
     def get_distconf(self):
         # TODO: get name from somewhere
-        flat = read_calib('/data/meds1_a/eglez/imaxt/flat_dev.nc')
+        flat = read_calib("/data/meds1_a/eglez/imaxt/flat_dev.nc")
         flat = flat[Settings.channel_to_use - 1]
         conf = da.where((flat < 0.3) | (flat > 5), 0, 1)
         res = apply_geometric_transform(conf, 0.0, 1.0, Settings.cof_dist)
-        return res.astype('uint8')
+        return res.astype("uint8")
 
     def find_offsets(self):
         """Calculate offsets between all pairs of overlapping images
@@ -189,7 +189,7 @@ class Section:
         client = Client.current()
         # convert to find_shifts
         results = []
-        log.info('Processing section %s', self._section.name)
+        log.info("Processing section %s", self._section.name)
         # TODO: reference channel from config
         img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
 
@@ -235,7 +235,7 @@ class Section:
                     sign = 1
 
                 log.info(
-                    'Initial offsets i: %d j: %d dx: %d dy: %d',
+                    "Initial offsets i: %d j: %d dx: %d dy: %d",
                     ref_img,
                     obj_img,
                     desp[0],
@@ -255,7 +255,7 @@ class Section:
             dx, dy, mi, npx = res.x, res.y, res.mi, res.avg_flux
             offsets.append([i, j, res, sign])
             log.info(
-                'Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d',
+                "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
                 self._section.name,
                 i,
                 j,
@@ -295,7 +295,7 @@ class Section:
             ]
         )
 
-        log.debug('Scale %f %f', x_scale, y_scale)
+        log.debug("Scale %f %f", x_scale, y_scale)
 
         self._x_scale, self._y_scale = x_scale, y_scale
         return (x_scale, y_scale)
@@ -304,7 +304,7 @@ class Section:
         """Return the pairs of mags of the detector
         """
         offsets = self._offsets
-        dx, dy = self['XPos'], self['YPos']
+        dx, dy = self["XPos"], self["YPos"]
 
         px = {}
         mu = {}
@@ -312,17 +312,17 @@ class Section:
         avg_flux = {}
 
         for i, j, res, _sign in offsets:
-            px[f'{i}:{j}'] = [res.y, res.x]
-            px[f'{j}:{i}'] = [-res.y, -res.x]
+            px[f"{i}:{j}"] = [res.y, res.x]
+            px[f"{j}:{i}"] = [-res.y, -res.x]
 
-            mu[f'{i}:{j}'] = [dx[j] - dx[i], dy[j] - dy[i]]
-            mu[f'{j}:{i}'] = [dx[i] - dx[j], dy[i] - dy[j]]
+            mu[f"{i}:{j}"] = [dx[j] - dx[i], dy[j] - dy[i]]
+            mu[f"{j}:{i}"] = [dx[i] - dx[j], dy[i] - dy[j]]
 
-            mi[f'{i}:{j}'] = res.mi
-            mi[f'{j}:{i}'] = res.mi
+            mi[f"{i}:{j}"] = res.mi
+            mi[f"{j}:{i}"] = res.mi
 
-            avg_flux[f'{i}:{j}'] = res.avg_flux
-            avg_flux[f'{j}:{i}'] = res.avg_flux
+            avg_flux[f"{i}:{j}"] = res.avg_flux
+            avg_flux[f"{j}:{i}"] = res.avg_flux
 
         self._px, self._mu = px, mu
         self._mi, self._avg = mi, avg_flux
@@ -367,24 +367,24 @@ class Section:
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
         log.debug(
-            'Default displacement X:  dx:%f , dy:%f, std:%f',
+            "Default displacement X:  dx:%f , dy:%f, std:%f",
             default_x[0],
             default_x[1],
             dev_x,
         )
         log.debug(
-            'Default displacement Y:  dx:%f , dy:%f, std:%f',
+            "Default displacement Y:  dx:%f , dy:%f, std:%f",
             default_y[0],
             default_y[1],
             dev_y,
         )
 
-        self._section.attrs['default_displacements'] = [
+        self._section.attrs["default_displacements"] = [
             {
-                'default_x': default_x,
-                'dev_x': dev_x,
-                'default_y': default_y,
-                'dev_y': dev_y,
+                "default_x": default_x,
+                "dev_x": dev_x,
+                "default_y": default_y,
+                "dev_y": dev_y,
             }
         ]
         return default_x, dev_x, default_y, dev_y
@@ -392,7 +392,7 @@ class Section:
     def compute_abspos(self):  # noqa: C901
         """Compute absolute positions of images in the field of view.
         """
-        log.info('Processing section %s', self._section.name)
+        log.info("Processing section %s", self._section.name)
         self.compute_pairs()
         scale_x, scale_y = self.scale
 
@@ -402,7 +402,7 @@ class Section:
         ref_img_assemble = img_cube_stack.sum(axis=(1, 2)).argmax()
         ref_img_assemble = ref_img_assemble.compute()
         # ref_img_assemble = 0
-        log.debug('Reference image %d', ref_img_assemble)
+        log.debug("Reference image %d", ref_img_assemble)
         dx0, dy0 = self.find_grid()
         default_x, dev_x, default_y, dev_y = self.get_default_displacement()
 
@@ -447,8 +447,8 @@ class Section:
                             # the other direction
                             err_px = np.sqrt(
                                 (
-                                    self._px[f'{ref_img}:{this_img}'][0]
-                                    - self._mu[f'{ref_img}:{this_img}'][0] / scale_x
+                                    self._px[f"{ref_img}:{this_img}"][0]
+                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
                                 )
                                 ** 2
                             )
@@ -461,13 +461,13 @@ class Section:
                             # amount, so it is better to keep what is in the mosaic
                             if (dy0[ref_img] == 0.0) | (dy0[this_img] == 0.0):
                                 default_desp[1] = (
-                                    self._mu[f'{ref_img}:{this_img}'][1] / scale_y
+                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 )
 
                             err_px = np.sqrt(
                                 (
-                                    self._px[f'{ref_img}:{this_img}'][1]
-                                    - self._mu[f'{ref_img}:{this_img}'][1] / scale_y
+                                    self._px[f"{ref_img}:{this_img}"][1]
+                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 )
                                 ** 2
                             )
@@ -476,17 +476,17 @@ class Section:
                             # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
                                 abs_pos[ref_img, 0]
-                                + self._px[f'{ref_img}:{this_img}'][0]
+                                + self._px[f"{ref_img}:{this_img}"][0]
                             )
                             temp_pos[1].append(
                                 abs_pos[ref_img, 1]
-                                + self._px[f'{ref_img}:{this_img}'][1]
+                                + self._px[f"{ref_img}:{this_img}"][1]
                             )
                             temp_err.append(
                                 1.0
                             )  # this seems to be the error for good pairs
                             # weights
-                            weight.append(self._avg[f'{ref_img}:{this_img}'] ** 2)
+                            weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
                             temp_qual.append(pos_quality[ref_img])
                             prov_im.append(ref_img)
                         else:
@@ -513,11 +513,11 @@ class Section:
                 pos_quality[this_img] = np.mean(temp_qual)
                 done += 1
 
-                prov_str = ''
+                prov_str = ""
                 for im_temp in prov_im:
-                    prov_str += '{0:+02d}'.format(int(im_temp))
+                    prov_str += "{0:+02d}".format(int(im_temp))
                 log.debug(
-                    'Done Img %d from %s with quality %f',
+                    "Done Img %d from %s with quality %f",
                     this_img,
                     prov_str,
                     np.mean(temp_qual),
@@ -525,8 +525,8 @@ class Section:
             if done == len(dx0):
                 break
 
-        self._section.attrs['abs_pos'] = abs_pos.tolist()
-        self._section.attrs['pos_quality'] = pos_quality.tolist()
+        self._section.attrs["abs_pos"] = abs_pos.tolist()
+        self._section.attrs["pos_quality"] = pos_quality.tolist()
         return abs_pos, abs_err
 
     def stitch(self, output: Path):
@@ -540,38 +540,38 @@ class Section:
 
         # TODO: This is the start of staging support
         # (i.e creating the mosaic in temp storage)
-        out_shape = (self['mrows'] * self.shape[0], self['mcolumns'] * self.shape[1])
+        out_shape = (self["mrows"] * self.shape[0], self["mcolumns"] * self.shape[1])
         results = []
-        z = zarr.open(f'{output}_temp.zarr', mode='w')
+        z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
-                g = z.create_group(f'/mosaic/{self._section.name}/z={sl}/channel={ch}')
+                g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
                 res = _mosaic(im_t, conf, abs_pos, abs_err, out=g, out_shape=out_shape)
                 results.append(res)
 
         futures = client.compute(results)
         for fut in as_completed(futures):
             res = fut.result()
-            log.info('Mosaic saved %s', res)
+            log.info("Mosaic saved %s", res)
 
         # Move mosaic to final destination with correct format
         mos_overlap = []
         mos_raw = []
         mos_err = []
-        for name, offset in z[f'mosaic/{self._section.name}'].groups():
+        for name, offset in z[f"mosaic/{self._section.name}"].groups():
             raw = da.stack(
                 [
-                    da.from_zarr(ch['raw']) / da.from_zarr(ch['overlap'])
+                    da.from_zarr(ch["raw"]) / da.from_zarr(ch["overlap"])
                     for name, ch in offset.groups()
                 ]
             )
             overlap = da.stack(
-                [da.from_zarr(ch['overlap']) for name, ch in offset.groups()]
+                [da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]
             )
             err = da.stack(
-                [da.from_zarr(ch['pos_err']) for name, ch in offset.groups()]
+                [da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
@@ -583,35 +583,35 @@ class Section:
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(
-            mos.astype('uint16'),
-            dims=('type', 'z', 'channel', 'y', 'x'),
+            mos.astype("uint16"),
+            dims=("type", "z", "channel", "y", "x"),
             coords={
-                'type': ['mosaic', 'conf', 'err'],
-                'x': range(nx),
-                'y': range(ny),
-                'z': range(nz),
-                'channel': range(nch + 1)[1:],
+                "type": ["mosaic", "conf", "err"],
+                "x": range(nx),
+                "y": range(ny),
+                "z": range(nz),
+                "channel": range(nch + 1)[1:],
             },
         )
 
-        raw.attrs['default_displacements'] = self._section.attrs[
-            'default_displacements'
+        raw.attrs["default_displacements"] = self._section.attrs[
+            "default_displacements"
         ]
-        raw.attrs['abs_pos'] = self._section.attrs['abs_pos']
-        raw.attrs['pos_quality'] = self._section.attrs['pos_quality']
-        raw.attrs['offsets'] = self._offsets
-        raw.attrs['scale'] = [self._x_scale, self._y_scale]
+        raw.attrs["abs_pos"] = self._section.attrs["abs_pos"]
+        raw.attrs["pos_quality"] = self._section.attrs["pos_quality"]
+        raw.attrs["offsets"] = self._offsets
+        raw.attrs["scale"] = [self._x_scale, self._y_scale]
 
         ds = xr.Dataset({self._section.name: raw})
-        ds.to_zarr(f'{output}_mos.zarr', mode='a')
+        ds.to_zarr(f"{output}/mos.zarr", mode="a")
 
     def downsample(self, output):
-        up = f'{output}_mos.zarr'
+        up = f"{output}/mos.zarr"
         for factor in [2, 4, 8, 16]:
-            down = f'{output}_mos{factor}.zarr'
+            down = f"{output}/mos{factor}.zarr"
             ds = xr.open_zarr(up)
             nds = xr.Dataset()
-            nds.to_zarr(down, 'w')
+            nds.to_zarr(down, "w")
 
             for s in list(ds):
                 nds = xr.Dataset()
@@ -634,17 +634,17 @@ class Section:
                 nt, nz, nch, ny, nx = arr_t.shape
                 narr = xr.DataArray(
                     arr_t,
-                    dims=('type', 'z', 'channel', 'y', 'x'),
+                    dims=("type", "z", "channel", "y", "x"),
                     coords={
-                        'channel': range(1, nch + 1),
-                        'type': ['mosaic', 'conf', 'err'],
-                        'x': range(nx),
-                        'y': range(ny),
-                        'z': range(nz),
+                        "channel": range(1, nch + 1),
+                        "type": ["mosaic", "conf", "err"],
+                        "x": range(nx),
+                        "y": range(ny),
+                        "z": range(nz),
                     },
                 )
                 nds[s] = narr
-                nds.to_zarr(down, mode='a')
+                nds.to_zarr(down, mode="a")
 
             up = down
 
@@ -659,11 +659,11 @@ class STPTMosaic:
     """
 
     def __init__(self, filename: Path):
-        self._ds = xr.open_zarr(f'{filename}')
+        self._ds = xr.open_zarr(f"{filename}")
 
     def initialize_storage(self, output):
         ds = xr.Dataset()
-        ds.to_zarr(f'{output}_mos.zarr', mode='w')
+        ds.to_zarr(f"{output}/mos.zarr", mode="w")
 
     def sections(self):
         """Sections generator
