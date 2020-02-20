@@ -1,0 +1,19 @@
+# Version of the configuration file
+version: 1.1
+
+# Name of the pipeline
+extra_pip_packages: stpt-pipeline
+name: stpt
+
+# Pipeline arguments
+root_dir: /data/meds1_a/imaxtapp/incoming/MA1-0003/STPT/MA1-191127-1125
+output_dir: /data/meds1_b/processed/STPT
+
+recipes: ["preprocess", "distortion", "mosaic", "downsample", "tiff"]
+
+# Resources requested
+resources:
+  threads: 1
+  workers: 20
+  memory: 12
+
