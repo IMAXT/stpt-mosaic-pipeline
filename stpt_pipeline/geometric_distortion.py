@@ -164,7 +164,7 @@ def distort(
     ds.to_zarr(output, mode="w")
     flat = read_calib(flat_file).persist()
     dark = read_calib(dark_file).persist()
-    ds = xr.open_zarr(input)
+    ds = xr.open_zarr(f"{input}")
     sections = list(ds)
 
     j = nparallel if len(sections) > nparallel else len(sections)

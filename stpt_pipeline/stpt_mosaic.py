@@ -190,8 +190,7 @@ class Section:
         return np.stack((dx, dy))
 
     def get_distconf(self):
-        # TODO: get name from somewhere
-        flat = read_calib("/data/meds1_a/eglez/imaxt/flat_dev.nc")
+        flat = read_calib(Settings.flat_file)
         flat = flat[Settings.channel_to_use - 1]
         conf = da.where((flat < 0.3) | (flat > 5), 0, 1)
         res = apply_geometric_transform(conf, 0.0, 1.0, Settings.cof_dist)

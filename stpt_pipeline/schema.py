@@ -2,6 +2,16 @@ from pathlib import Path
 
 import voluptuous as vo
 
+DEFAULT_RECIPES = ["preprocess", "distortion", "mosaic", "downsample", "tiff"]
+
+
+def check_recipes(val):
+    for item in val:
+        if item not in DEFAULT_RECIPES:
+            raise vo.Invalid(f"Not a valid recipe {item!r}")
+    return val
+
+
 # TODO: make sure they are lists of floats
 cof_dist_schema = vo.Schema(
     {vo.Required("cof_x"): list, vo.Required("cof_y"): list, vo.Required("tan"): list}
@@ -11,8 +21,7 @@ schema = vo.Schema(
     {
         vo.Required("root_dir"): vo.Coerce(Path),
         vo.Required("output_dir"): vo.Coerce(Path),
-        vo.Required("flat_file"): vo.Coerce(Path),
-        vo.Required("dark_file"): vo.Coerce(Path),
-        vo.Required("cof_dist"): cof_dist_schema,
+        vo.Required("recipes"): vo.All(list, check_recipes),
+        vo.Optional("cof_dist"): cof_dist_schema,
     }
 )

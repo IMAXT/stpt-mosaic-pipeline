@@ -1,5 +1,5 @@
 # Version of the configuration file
-version: 1
+version: 1.1
 
 # Name of the pipeline
 extra_pip_packages: stpt-pipeline
@@ -7,16 +7,11 @@ name: stpt
 
 # Pipeline arguments
 # root_dir: /data/meds1_a/imaxtapp/incoming/FQ1-0001/STPT/FQ1-190509-1508
-# root_dir: /data/meds1_a/imaxtapp/incoming/MA1-0003/STPT/MA1-191127-1125
-root_dir: /data/meds1_a/imaxtapp/incoming/CM1-0018/STPT/CM1-191127-1125
-output_dir: /data/meds1_b/eglez/imaxt/stpt4
-flat_file: /data/meds1_a/eglez/imaxt/flat_dev.nc
-dark_file: /data/meds1_a/eglez/imaxt/dark_dev.nc
+root_dir: /data/meds1_a/imaxtapp/incoming/MA1-0003/STPT/MA1-191127-1125
+# root_dir: /data/meds1_a/imaxtapp/incoming/CM1-0018/STPT/CM1-191127-1125
+output_dir: /data/meds1_b/eglez/imaxt/stpt6
 
-cof_dist:
-  cof_x: [-0.3978768594309433, 22.021244273079315, 4.969194161793347, 1.489648554969356]
-  cof_y: [0.24781724665108668, -1.908123031173702, -3.1947393819597947, 1.5466333490746447]
-  tan: [974.42215511, 1037.63451947]
+recipes: ["preprocess", "distortion", "mosaic", "downsample", "tiff"]
 
 # Resources requested
 resources:

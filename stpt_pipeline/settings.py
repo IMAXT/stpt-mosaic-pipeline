@@ -24,7 +24,21 @@ class Settings:
     """Channel to use to calculate offsets
     """
 
-    cof_dist = None
+    cof_dist = {
+        "cof_x": [
+            -0.3978768594309433,
+            22.021244273079315,
+            4.969194161793347,
+            1.489648554969356,
+        ],
+        "cof_y": [
+            0.24781724665108668,
+            -1.908123031173702,
+            -3.1947393819597947,
+            1.5466333490746447,
+        ],
+        "tan": [974.42215511, 1037.63451947],
+    }
     """distortion coefficients (filled in from the configuration at runtime)
     """
 
@@ -40,3 +54,6 @@ class Settings:
     allowed_error_px = 5
     """allowed pixel difference when comparing measured disp with mosaic
     """
+
+    flat_file = "/data/meds1_a/eglez/imaxt/flat_dev.nc"
+    dark_file = "/data/meds1_a/eglez/imaxt/dark_dev.nc"
