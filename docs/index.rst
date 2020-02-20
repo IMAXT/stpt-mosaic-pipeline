@@ -1,20 +1,13 @@
-Welcome to STPT Pipeline's documentation!
-=========================================
+STPT Pipeline
+=============
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
    readme
-   installation
    usage
    source/modules
    contributing
    authors
    history
-
-Indices and tables
-==================
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

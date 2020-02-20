@@ -1,123 +1,102 @@
-.. highlight:: shell
+.. _stpt_contributing:
 
-============
-Contributing
-============
+Contributing to development
+===========================
 
-Contributions are welcome, and they are greatly appreciated! Every little bit
-helps, and credit will always be given.
+The code is kept in a git repository at https://gitlab.ast.cam.ac.uk/imaxt/stpt-pipeline
 
-You can contribute in many ways:
+Setting up git
+--------------
 
-Types of Contributions
-----------------------
+The first thing is to install git if it is not already installed. Follow the
+instructions here_.
 
-Report Bugs
-~~~~~~~~~~~
+.. _here: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
 
-Report bugs at https://gitlab.ast.cam.ac.uk/imaxt/{ cookiecutter.project_slug }}/issues.
 
-If you are reporting a bug, please include:
+Then set up your user name and email address.
 
-* Your operating system name and version.
-* Any details about your local setup that might be helpful in troubleshooting.
-* Detailed steps to reproduce the bug.
+.. code-block:: bash
 
-Fix Bugs
-~~~~~~~~
+   $ git config --global user.name "John Doe"
+   $ git config --global user.email johndoe@example.com
 
-Look through the GitHub issues for bugs. Anything tagged with "bug" and "help
-wanted" is open to whoever wants to implement it.
+You can also configure the editor that will be used when some text is needed
+(e.g. to edit commit messages):
 
-Implement Features
-~~~~~~~~~~~~~~~~~~
+.. code-block:: bash
 
-Look through the GitHub issues for features. Anything tagged with "enhancement"
-and "help wanted" is open to whoever wants to implement it.
+   $ git config --global core.editor emacs
 
-Write Documentation
-~~~~~~~~~~~~~~~~~~~
+Note that this needs to be done only once.
 
-STPT Pipeline could always use more documentation, whether as part of the
-official STPT Pipeline docs, in docstrings, or even on the web in blog posts,
-articles, and such.
 
-Submit Feedback
-~~~~~~~~~~~~~~~
+Setting up your Gitlab account
+------------------------------
 
-The best way to send feedback is to file an issue at https://gitlab.ast.cam.ac.uk/imaxt/stpt_pipeline/issues.
+Once registered, login into your gitlab account and
+`add your SSH key <https://gitlab.ast.cam.ac.uk/profile/keys>`_ to your
+account in order to be able to checkout and commit code.
 
-If you are proposing a feature:
 
-* Explain in detail how it would work.
-* Keep the scope as narrow as possible, to make it easier to implement.
-* Remember that this is a volunteer-driven project, and that contributions
-  are welcome :)
+Contributing code
+-----------------
 
-Get Started!
-------------
+1. Clone the repository you want to work on locally::
 
-Ready to contribute? Here's how to set up `stpt_pipeline` for local development.
+     $ git clone git@gitlab.ast.cam.ac.uk:imaxt/stpt-pipeline.git
 
-1. Fork the `stpt_pipeline` repo on GitHub.
-2. Clone your fork locally::
+2. Install your local copy either in a virtualenv or a conda environment. Assuming you have
+   virtualenvwrapper installed, this is how you setup your local development
+   environment::
 
-    $ git clone git@github.com:your_name_here/stpt_pipeline.git
+     $ mkvirtualenv imaxt
+     $ cd imc-pipeline
+     $ pip install -r requirements_dev.txt
+     $ python setup.py develop
 
-3. Install your local copy into a virtualenv. Assuming you have virtualenvwrapper installed, this is how you set up your fork for local development::
+3. In order to contribute code, first create a branch where your changes are
+   going to be done::
 
-    $ mkvirtualenv stpt_pipeline
-    $ cd stpt_pipeline/
-    $ pip install -r requirements_dev.txt
-    $ python setup.py develop
+     $ git checkout -b name-of-your-bugfix-or-feature
+     $ git push --set-upstream origin name-of-your-bugfix-or-feature
 
-4. Create a branch for local development::
+   Now you can make your changes. Note that the code should adhere to the
+   :ref:`Python style guide<imaxt:style-guide-main>` and
+   :ref:`Documenting Python APIs<imaxt:numpydoc-format>` documents.
 
-    $ git checkout -b name-of-your-bugfix-or-feature
+4. When all changes are done, check that they pass flakes8 and the tests::
 
-   Now you can make your changes locally.
+     $ python setup.py flake8
+     $ python setup.py test
 
-5. When you're done making changes, check that your changes pass flake8 and the
-   tests, including testing other Python versions with tox::
+   It is useful as well to have autopep8 and isort run on the code.
+   Check also that the documents, located in the ``doc`` directory build ok::
 
-    $ flake8 stpt_pipeline tests
-    $ python setup.py test or py.test
+     $ python setup.py build_sphinx
 
-6. Commit your changes and push your branch to GitHub::
+The command above will build the documentation in ``build/sphinx/html``.
 
-    $ git add .
-    $ git commit -m "Your detailed description of your changes."
-    $ git push origin name-of-your-bugfix-or-feature
+5. Commit your changes and push your branch::
 
-7. Submit a pull request through the GitHub website.
+     $ git add .
+     $ git commit -m "Your detailed description of your changes."
+     $ git push
 
-Pull Request Guidelines
------------------------
+6. Submit a merge request `<https://gitlab.ast.cam.ac.uk/imaxt/stpt-pipeline/merge_requests/new>`_
+   through the website.
 
-Before you submit a pull request, check that it meets these guidelines:
+7. If this contribution is associated to a Jira or Gitlab ticket, update the ticket with
+   the URL of the merge request (and possibly change its status to "To Review").
 
-1. The pull request should include tests.
-2. If the pull request adds functionality, the docs should be updated. Put
-   your new functionality into a function with a docstring, and add the
-   feature to the list in README.rst.
-3. The pull request should work for Python 3.7.
+Running the pipeline in development
+-----------------------------------
 
-Tips
-----
+In order to run the pipeline in development mode you will need to install the Owl Client::
 
-To run a subset of tests::
+     $ pip install owl-client
 
-    $ py.test tests.test_stpt_pipeline
+Given a pipeline definition file (see :ref:`stpt_pipedef`), the pipeline can then be run using::
 
-Deploying
----------
+     env LOGLEVEL=DEBUG owl execute /path/to/config.yaml
 
-A reminder for the maintainers on how to deploy.
-Make sure all your changes are committed (including an entry in HISTORY.rst).
-Then run::
-
-$ bumpversion patch # possible: major / minor / patch
-$ git push
-$ git push --tags
-
-GitLab will deploy if tests pass.

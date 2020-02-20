@@ -1,5 +1,5 @@
-stpt_pipeline
-=============
+STPT Pipeline Modules
+=====================
 
 .. toctree::
    :maxdepth: 4
