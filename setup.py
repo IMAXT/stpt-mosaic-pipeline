@@ -11,12 +11,13 @@ with open('HISTORY.rst') as history_file:
 requirements = [
     'dask',
     'distributed',
-    'imaxt-image>=0.13',
+    'imaxt-image',
     'zarr',
     'numpy',
     'scipy',
     'voluptuous',
-    'xarray>=0.14',
+    'xarray',
+    'opencv-python',
 ]
 
 setup_requirements = ['pytest-runner', 'flake8']
