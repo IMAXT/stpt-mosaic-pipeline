@@ -1,9 +1,10 @@
 import logging
 import traceback
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 import cv2
+import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
@@ -12,6 +13,7 @@ from dask import delayed
 from distributed import Client, as_completed
 from scipy.stats import median_absolute_deviation as mad
 
+from imaxt_image.external.tifffile import TiffWriter
 from imaxt_image.registration import find_overlap_conf
 
 from .geometric_distortion import apply_geometric_transform, read_calib
@@ -24,6 +26,18 @@ log = logging.getLogger("owl.daemon.pipeline")
 @delayed
 def _sink(*args):
     return args
+
+
+@delayed
+def arr2tiff(output, arr, scl):
+    ch = str(arr.channel.values)
+    z = str(arr.z.values)
+    p = Path(f"{output}/tiff/mos{scl}/{arr.name}/Z{z}")
+    p.mkdir(exist_ok=True, parents=True)
+    filename = p / f"{output.name}-{arr.name}-z{z}-ch{ch}.tif"
+    with TiffWriter(f"{filename}") as writer:
+        writer.save(arr.astype("uint16"), compress=6)
+    return filename
 
 
 @retry(Exception)
@@ -47,9 +61,9 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
 
     log.debug("Mosaic size: %dx%d", x_size, y_size)
 
-    big_picture = _get_image(out, "raw", (y_size, x_size), dtype="uint16")
-    overlap = _get_image(out, "overlap", (y_size, x_size), dtype="uint16")
-    pos_err = _get_image(out, "pos_err", (y_size, x_size), dtype="uint16")
+    big_picture = _get_image(out, "raw", (y_size, x_size), dtype="float32")
+    overlap = _get_image(out, "overlap", (y_size, x_size), dtype="float32")
+    pos_err = _get_image(out, "pos_err", (y_size, x_size), dtype="float32")
 
     for i in range(len(im_t)):
         y0 = int(abs_pos[i, 0] - y_delta)
@@ -58,10 +72,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
         xslice = slice(x0, x0 + im_t[i].shape[1])
 
         try:
-            mos = 1 + im_t[i] * conf
-            big_picture[yslice, xslice] += mos.astype("uint16") * 10_000
-            overlap[yslice, xslice] += conf.astype("uint16") * 100
-            pos_err[yslice, xslice] += abs_err[i].astype("uint16") * 100
+            mos = im_t[i].data * conf
+            big_picture[yslice, xslice] += mos
+            overlap[yslice, xslice] += conf
+            pos_err[yslice, xslice] += abs_err[i]
         except ValueError:
             log.error(traceback.format_exc())
 
@@ -190,7 +204,6 @@ class Section:
         # convert to find_shifts
         results = []
         log.info("Processing section %s", self._section.name)
-        # TODO: reference channel from config
         img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
 
         # Calculate confidence map. Only needs to be done once per section
@@ -234,7 +247,7 @@ class Section:
                     im_ref = im_i
                     sign = 1
 
-                log.info(
+                log.debug(
                     "Initial offsets i: %d j: %d dx: %d dy: %d",
                     ref_img,
                     obj_img,
@@ -254,7 +267,7 @@ class Section:
             i, j, res, sign = fut.result()
             dx, dy, mi, npx = res.x, res.y, res.mi, res.avg_flux
             offsets.append([i, j, res, sign])
-            log.info(
+            log.debug(
                 "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
                 self._section.name,
                 i,
@@ -330,6 +343,7 @@ class Section:
     def get_default_displacement(self):
         """Calculates the default displacements in X and Y
         from the offsets estimated for every pair of images.
+
         Measured individual displacements are weighted with
         the average flux in the overlap region
         """
@@ -554,7 +568,7 @@ class Section:
         futures = client.compute(results)
         for fut in as_completed(futures):
             res = fut.result()
-            log.info("Mosaic saved %s", res)
+            log.debug("Temporary mosaic saved %s", res)
 
         # Move mosaic to final destination with correct format
         mos_overlap = []
@@ -567,11 +581,14 @@ class Section:
                     for name, ch in offset.groups()
                 ]
             )
-            overlap = da.stack(
-                [da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]
+            raw = (raw + 10) * 1_000
+            overlap = (
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
+                * 100
             )
-            err = da.stack(
-                [da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]
+            err = (
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
+                * 100
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
@@ -603,17 +620,56 @@ class Section:
         raw.attrs["scale"] = [self._x_scale, self._y_scale]
 
         ds = xr.Dataset({self._section.name: raw})
-        ds.to_zarr(f"{output}/mos.zarr", mode="a")
+        ds.to_zarr(output / "mos1.zarr", mode="a")
+        log.info("Mosaic saved %s", output / "mos1.zarr")
 
-    def downsample(self, output):
-        up = f"{output}/mos.zarr"
-        for factor in [2, 4, 8, 16]:
-            down = f"{output}/mos{factor}.zarr"
-            ds = xr.open_zarr(up)
+
+class STPTMosaic:
+    """STPT Mosaic
+
+    Parameters
+    ----------
+    arr
+        Zarr array containing the full STPT sample.
+    """
+
+    def __init__(self, filename: Path):
+        self._ds = xr.open_zarr(f"{filename}")
+
+    def initialize_storage(self, output: Path):
+        ds = xr.Dataset()
+        ds.to_zarr(output / "mos1.zarr", mode="w")
+
+    def sections(self):
+        """Sections generator
+        """
+        for section in self._ds:
+            yield Section(self._ds[section])
+
+    def downsample(self, output: Path, scales: List[int] = None):
+        """Downsample mosaic.
+
+        Parameters
+        ----------
+        output
+            Location of output directory
+        scales
+            List of scales to produce. Default is
+            [2, 4, 8, 16]
+        """
+        log.info("Downsampling mosaics")
+        up = output / "mos1.zarr"
+        if scales is None:
+            scales = [2, 4, 8, 16]
+        for factor in scales:
+            log.debug("Downsampling factor %d", factor)
+            down = output / f"mos{factor}.zarr"
+            ds = xr.open_zarr(f"{up}")
             nds = xr.Dataset()
             nds.to_zarr(down, "w")
 
             for s in list(ds):
+                log.debug("Downsampling mos%d [%s]", factor, s)
                 nds = xr.Dataset()
                 arr = ds[s]
                 nt, nz, nch, ny, nx = tuple(c[0] for c in arr.chunks)
@@ -633,7 +689,7 @@ class Section:
                 arr_t = da.stack(arr_t)
                 nt, nz, nch, ny, nx = arr_t.shape
                 narr = xr.DataArray(
-                    arr_t,
+                    arr_t.astype("uint16"),
                     dims=("type", "z", "channel", "y", "x"),
                     coords={
                         "channel": range(1, nch + 1),
@@ -645,28 +701,33 @@ class Section:
                 )
                 nds[s] = narr
                 nds.to_zarr(down, mode="a")
+            log.info("Downsampled mosaic saved %s", down)
 
             up = down
 
+    def to_tiff(self, output: Path, scales: List[int] = None):
+        """Export mosaic to TIFF format.
 
-class STPTMosaic:
-    """STPT Mosaic
-
-    Parameters
-    ----------
-    arr
-        Zarr array containing the full STPT sample.
-    """
-
-    def __init__(self, filename: Path):
-        self._ds = xr.open_zarr(f"{filename}")
-
-    def initialize_storage(self, output):
-        ds = xr.Dataset()
-        ds.to_zarr(f"{output}/mos.zarr", mode="w")
-
-    def sections(self):
-        """Sections generator
+        Parameters
+        ----------
+        output
+            Location of output directory
+        scales
+            List of scales to produce. Default is
+            [16, 8, 4, 2, 1]
         """
-        for section in self._ds:
-            yield Section(self._ds[section])
+        if scales is None:
+            scales = [16, 8, 4, 2, 1]
+        for scl in scales:
+            arr = f"{output}/mos{scl}.zarr"
+            ds = xr.open_zarr(arr)
+            files = []
+            for section in list(ds):
+                files = []
+                for ch in list(ds.channel):
+                    for z in list(ds.z):
+                        im = ds[section].sel(type="mosaic", channel=ch, z=z)
+                        res = arr2tiff(output, im, scl)
+                        files.append(res)
+                for tfile in dask.compute(files)[0]:
+                    log.info("Written %s", tfile)
