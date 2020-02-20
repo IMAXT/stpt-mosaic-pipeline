@@ -7,6 +7,7 @@ from typing import Dict, List
 import dask.array as da
 import scipy.ndimage as ndimage
 import xarray as xr
+import zarr
 from dask import delayed
 from distributed import Client, as_completed
 
@@ -133,7 +134,12 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
     this.attrs = arr.attrs
     g[arr.name] = this
 
-    g.to_zarr(output, mode="a")
+    try:
+        g.to_zarr(output, mode="a")
+    except Exception:
+        zz = zarr.open(output)
+        del zz[arr.name]
+        raise Exception(f"Section {arr.name} already exists")
     return f"{output}[{arr.name}]"
 
 
