@@ -156,7 +156,8 @@ class Section:
         dx = np.array(self["XPos"])
         dy = np.array(self["YPos"])
 
-        r = np.sqrt((dx.astype(float) - dx[0]) ** 2 + (dy.astype(float) - dy[0]) ** 2)
+        r = np.sqrt((dx.astype(float) - dx[0])
+                    ** 2 + (dy.astype(float) - dy[0]) ** 2)
         r[0] = r.max()  # avoiding minimum at itself
         # first candidate
         dx_1 = np.abs(dx[r.argmin()] - dx[0])
@@ -264,7 +265,7 @@ class Section:
         offsets = []
         for fut in as_completed(futures):
             i, j, res, sign = fut.result()
-            dx, dy, mi, npx = res.x, res.y, res.mi, res.avg_flux
+            dx, dy, mi, avf = res.x, res.y, res.mi, res.avg_flux
             offsets.append([i, j, res, sign])
             log.debug(
                 "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
@@ -274,7 +275,7 @@ class Section:
                 dx,
                 dy,
                 mi,
-                npx,
+                avf,
                 sign,
             )
 
@@ -358,24 +359,34 @@ class Section:
             px_x[i] = res.x
             avg_flux[i] = res.avg_flux
 
+        # these are the thresholds to tell when
+        # the micro is doing the long move in one direction
+        short_displacement_x = np.nanmean(np.abs(px_x))
+        short_displacement_y = np.nanmean(np.abs(px_y))
+
         ii = np.where(
-            (np.abs(px_x) < 1000)
-            & (np.abs(px_y) > 1000)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_x) < short_displacement_x) &
+            (np.abs(px_y) > short_displacement_y) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_x = [
-            (px_y[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
+
         ii = np.where(
-            (np.abs(px_y) < 1000)
-            & (np.abs(px_x) > 1000)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_y) < short_displacement_y) &
+            (np.abs(px_x) > short_displacement_x) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_y = [
-            (px_y[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (px_x[ii] * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -451,7 +462,8 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0
+                                            * default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -460,13 +472,14 @@ class Section:
                             # the other direction
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][0]
-                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
-                                )
-                                ** 2
+                                    self._px[f"{ref_img}:{this_img}"][0] -
+                                    self._mu[f"{ref_img}:{this_img}"][0] / scale_x
+                                ) **
+                                2
                             )
                         else:
-                            default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0
+                                            * default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
@@ -479,32 +492,35 @@ class Section:
 
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][1]
-                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
-                                )
-                                ** 2
+                                    self._px[f"{ref_img}:{this_img}"][1] -
+                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
+                                ) **
+                                2
                             )
 
                         if err_px < Settings.allowed_error_px:
                             # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0]
-                                + self._px[f"{ref_img}:{this_img}"][0]
+                                abs_pos[ref_img, 0] +
+                                self._px[f"{ref_img}:{this_img}"][0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1]
-                                + self._px[f"{ref_img}:{this_img}"][1]
+                                abs_pos[ref_img, 1] +
+                                self._px[f"{ref_img}:{this_img}"][1]
                             )
                             temp_err.append(
                                 1.0
                             )  # this seems to be the error for good pairs
                             # weights
-                            weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
+                            weight.append(
+                                self._avg[f"{ref_img}:{this_img}"] ** 2)
                             temp_qual.append(pos_quality[ref_img])
                             prov_im.append(ref_img)
                         else:
-                            temp_pos[0].append(abs_pos[ref_img, 0] + default_desp[0])
-                            temp_pos[1].append(abs_pos[ref_img, 1] + default_desp[1])
+                            temp_pos[0].append(
+                                abs_pos[ref_img, 0] + default_desp[0])
+                            temp_pos[1].append(
+                                abs_pos[ref_img, 1] + default_desp[1])
                             temp_err.append(Settings.allowed_error_px ** 2)
                             weight.append(0.01 ** 2)  # artificially low weight
                             temp_qual.append(0.1)
@@ -513,10 +529,12 @@ class Section:
                 weight = np.array(weight) * np.array(temp_qual)
 
                 abs_pos[this_img, 0] = int(
-                    np.round((np.array(temp_pos[0]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[0]) * weight).sum() / weight.sum())
                 )
                 abs_pos[this_img, 1] = int(
-                    np.round((np.array(temp_pos[1]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[1]) * weight).sum() / weight.sum())
                 )
                 abs_err[this_img] = np.sqrt(
                     (np.array(temp_err) * weight).sum() / weight.sum()
@@ -553,15 +571,18 @@ class Section:
 
         # TODO: This is the start of staging support
         # (i.e creating the mosaic in temp storage)
-        out_shape = (self["mrows"] * self.shape[0], self["mcolumns"] * self.shape[1])
+        out_shape = (self["mrows"] * self.shape[0],
+                     self["mcolumns"] * self.shape[1])
         results = []
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
-                g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
-                res = _mosaic(im_t, conf, abs_pos, abs_err, out=g, out_shape=out_shape)
+                g = z.create_group(
+                    f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+                res = _mosaic(im_t, conf, abs_pos, abs_err,
+                              out=g, out_shape=out_shape)
                 results.append(res)
 
         futures = client.compute(results)
@@ -582,12 +603,12 @@ class Section:
             )
             raw = (raw + 10) * 1_000
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]) *
+                100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]) *
+                100
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
@@ -678,7 +699,8 @@ class STPTMosaic:
                     for z in arr.z:
                         arr_ch = []
                         for ch in arr.channel:
-                            im = arr.sel(z=z.values, type=t.values, channel=ch.values)
+                            im = arr.sel(z=z.values, type=t.values,
+                                         channel=ch.values)
                             res = im.data.map_blocks(
                                 cv2.pyrDown, chunks=(ny // 2, nx // 2)
                             )

@@ -115,6 +115,7 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
                 ]
             )
             channels.append(img)
+
         channels = da.stack(channels)
         tiles.append(channels)
     tiles = da.stack(tiles)
@@ -162,8 +163,12 @@ def distort(
     client = Client.current()
     ds = xr.Dataset()
     ds.to_zarr(output, mode="w")
+
+    # debug
     flat = read_calib(flat_file).persist()
+
     dark = read_calib(dark_file).persist()
+
     ds = xr.open_zarr(f"{input}")
     sections = list(ds)
 
