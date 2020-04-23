@@ -53,32 +53,36 @@ def _get_image(group, imgtype, shape, dtype="float32"):
 
 
 @delayed
+def cwrite(im, conf, abs_err, xslice, yslice, big_picture, overlap, pos_err):
+    mos = im.data * conf
+    big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
+    overlap[yslice, xslice] = overlap[yslice, xslice] + conf
+    pos_err[yslice, xslice] = pos_err[yslice, xslice] + abs_err
+
+
 def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
     assert out_shape is not None
     assert out is not None
     y_size, x_size = out_shape
     y_delta, x_delta = np.min(abs_pos, axis=0)
-
     log.debug("Mosaic size: %dx%d", x_size, y_size)
-
     big_picture = _get_image(out, "raw", (y_size, x_size), dtype="float32")
     overlap = _get_image(out, "overlap", (y_size, x_size), dtype="float32")
     pos_err = _get_image(out, "pos_err", (y_size, x_size), dtype="float32")
-
-    for i in range(len(im_t)):
+    for i, im in enumerate(im_t):
         y0 = int(abs_pos[i, 0] - y_delta)
         x0 = int(abs_pos[i, 1] - x_delta)
-        yslice = slice(y0, y0 + im_t[i].shape[0])
-        xslice = slice(x0, x0 + im_t[i].shape[1])
-
+        yslice = slice(y0, y0 + im.shape[0])
+        xslice = slice(x0, x0 + im.shape[1])
+        # We do each image synchronously
+        # Better would be create a list of those that do not everlap,
+        # make a list of delayed and compute those, then fill the gaps
+        # with another list of non overlapping, etc.
         try:
-            mos = im_t[i].data * conf
-            big_picture[yslice, xslice] += mos
-            overlap[yslice, xslice] += conf
-            pos_err[yslice, xslice] += abs_err[i]
-        except ValueError:
+            cwrite(im, conf, abs_err[i], xslice, yslice, big_picture, overlap,
+                   pos_err).compute()
+        except Exception:
             log.error(traceback.format_exc())
-
     return out
 
 
@@ -93,6 +97,7 @@ class Section:
 
     def __init__(self, section: xr.DataArray):
         self._section = section
+        self.stage_size = [0, 0]
 
     def __getitem__(self, attr):
         res = self._section.attrs[attr]
@@ -156,8 +161,8 @@ class Section:
         dx = np.array(self["XPos"])
         dy = np.array(self["YPos"])
 
-        r = np.sqrt((dx.astype(float) - dx[0])
-                    ** 2 + (dy.astype(float) - dy[0]) ** 2)
+        r = np.sqrt((dx.astype(float) - dx[0]) **
+                    2 + (dy.astype(float) - dy[0]) ** 2)
         r[0] = r.max()  # avoiding minimum at itself
         # first candidate
         dx_1 = np.abs(dx[r.argmin()] - dx[0])
@@ -365,28 +370,28 @@ class Section:
         short_displacement_y = np.nanmean(np.abs(px_y))
 
         ii = np.where(
-            (np.abs(px_x) < short_displacement_x) &
-            (np.abs(px_y) > short_displacement_y) &
-            (avg_flux > np.median(avg_flux))
+            (np.abs(px_x) < short_displacement_x)
+            & (np.abs(px_y) > short_displacement_y)
+            & (avg_flux > np.median(avg_flux))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
-            / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
-            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
         ii = np.where(
-            (np.abs(px_y) < short_displacement_y) &
-            (np.abs(px_x) > short_displacement_x) &
-            (avg_flux > np.median(avg_flux))
+            (np.abs(px_y) < short_displacement_y)
+            & (np.abs(px_x) > short_displacement_x)
+            & (avg_flux > np.median(avg_flux))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
-            / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
-            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -462,8 +467,8 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0
-                                            * default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0 *
+                                            default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -472,14 +477,14 @@ class Section:
                             # the other direction
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][0] -
-                                    self._mu[f"{ref_img}:{this_img}"][0] / scale_x
+                                    self._px[f"{ref_img}:{this_img}"][0]
+                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
                                 ) **
                                 2
                             )
                         else:
-                            default_desp = [-1.0
-                                            * default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0 *
+                                            default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
@@ -492,8 +497,8 @@ class Section:
 
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][1] -
-                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
+                                    self._px[f"{ref_img}:{this_img}"][1]
+                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 ) **
                                 2
                             )
@@ -501,12 +506,12 @@ class Section:
                         if err_px < Settings.allowed_error_px:
                             # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0] +
-                                self._px[f"{ref_img}:{this_img}"][0]
+                                abs_pos[ref_img, 0]
+                                + self._px[f"{ref_img}:{this_img}"][0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1] +
-                                self._px[f"{ref_img}:{this_img}"][1]
+                                abs_pos[ref_img, 1]
+                                + self._px[f"{ref_img}:{this_img}"][1]
                             )
                             temp_err.append(
                                 1.0
@@ -571,29 +576,50 @@ class Section:
 
         # TODO: This is the start of staging support
         # (i.e creating the mosaic in temp storage)
-        out_shape = (self["mrows"] * self.shape[0],
-                     self["mcolumns"] * self.shape[1])
+        # out_shape = (self["mrows"] * self.shape[0],
+        #              self["mcolumns"] * self.shape[1])
+
+        if self.stage_size[0] == 0:
+
+            self.stage_size = (
+                int(
+                    np.array(abs_pos[:, 0]).max()
+                    - np.array(abs_pos[:, 0]).min()
+                ) + self.shape[0],
+                int(
+                    np.array(abs_pos[:, 1]).max()
+                    - np.array(abs_pos[:, 1]).min()
+                ) + self.shape[1]
+            )
+
         results = []
+
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
-        for sl in range(self.slices):
-            for ch in range(self.channels):
+        # debug
+        for sl in [0]:  # range(self.slices):
+            for ch in [3]:  # range(self.channels):
                 im_t = self.get_img_section(sl, ch)
                 g = z.create_group(
                     f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
                 res = _mosaic(im_t, conf, abs_pos, abs_err,
-                              out=g, out_shape=out_shape)
+                              out=g, out_shape=self.stage_size)
                 results.append(res)
 
-        futures = client.compute(results)
-        for fut in as_completed(futures):
-            res = fut.result()
-            log.debug("Temporary mosaic saved %s", res)
+        # Now when _mosaic is done the file is already written,
+        # so this block thros an error
+        # futures = client.compute(results)
+        # for fut in as_completed(futures):
+        #     res = fut.result()
+        #     log.debug("Temporary mosaic saved %s", res)
+
+        log.debug("Temporary mosaic saved %s", res)
 
         # Move mosaic to final destination with correct format
         mos_overlap = []
         mos_raw = []
         mos_err = []
+
         for name, offset in z[f"mosaic/{self._section.name}"].groups():
             raw = da.stack(
                 [
@@ -603,12 +629,12 @@ class Section:
             )
             raw = (raw + 10) * 1_000
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]) *
-                100
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
+                * 100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]) *
-                100
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
+                * 100
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
@@ -655,6 +681,11 @@ class STPTMosaic:
 
     def __init__(self, filename: Path):
         self._ds = xr.open_zarr(f"{filename}")
+
+        # this is to carry over the mosaic size between
+        # sections
+
+        self.stage_size = [0, 0]
 
     def initialize_storage(self, output: Path):
         ds = xr.Dataset()

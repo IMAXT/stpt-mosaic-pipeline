@@ -46,11 +46,19 @@ def main(  # noqa: C901
     mos = STPTMosaic(out_dis)
     if "mosaic" in recipes:
         if not out_dis.exists():
-            raise FileNotFoundError(f"Distortion corrected data not found in {out_dis}")
+            raise FileNotFoundError(
+                f"Distortion corrected data not found in {out_dis}")
         mos.initialize_storage(basedir)
+
         for section in mos.sections():
+            # initialize stage size:
+            section.stage_size = mos.stage_size
+
             section.find_offsets()
             section.stitch(basedir)
+
+            # after the first section, stage size is fixed:
+            mos.stage_size = section.stage_size
 
     if "downsample" in recipes:
         mos.downsample(basedir)
