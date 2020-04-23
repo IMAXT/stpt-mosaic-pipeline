@@ -581,16 +581,24 @@ class Section:
 
         if self.stage_size[0] == 0:
 
-            self.stage_size = (
-                int(
-                    np.array(abs_pos[:, 0]).max()
-                    - np.array(abs_pos[:, 0]).min()
-                ) + self.shape[0],
-                int(
-                    np.array(abs_pos[:, 1]).max()
-                    - np.array(abs_pos[:, 1]).min()
-                ) + self.shape[1]
-            )
+            shape_0 = int(
+                np.array(abs_pos[:, 0]).max()
+                - np.array(abs_pos[:, 0]).min()
+            ) + self.shape[0]
+            shape_1 = int(
+                np.array(abs_pos[:, 1]).max()
+                - np.array(abs_pos[:, 1]).min()
+            ) + self.shape[1]
+
+            # this has to be a multiple of the chunk size
+            if shape_0 % 2080 != 0:
+                n_imgs = int(shape_0 / 2080.) + 1
+                shape_0 = int(2080 * n_imgs)
+            if shape_1 % 2080 != 0:
+                n_imgs = int(shape_1 / 2080.) + 1
+                shape_1 = int(2080 * n_imgs)
+
+            self.stage_size = (shape_0, shape_1)
 
         results = []
 
