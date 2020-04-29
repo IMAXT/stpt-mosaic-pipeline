@@ -161,18 +161,25 @@ class Section:
         dx = np.array(self["XPos"])
         dy = np.array(self["YPos"])
 
-        r = np.sqrt((dx.astype(float) - dx[0]) **
-                    2 + (dy.astype(float) - dy[0]) ** 2)
-        r[0] = r.max()  # avoiding minimum at itself
-        # first candidate
-        dx_1 = np.abs(dx[r.argmin()] - dx[0])
-        dy_1 = np.abs(dy[r.argmin()] - dy[0])
-        # second candidate
-        r[r.argmin()] = r.max()
-        dx_2 = np.abs(dx[r.argmin()] - dx[0])
-        dy_2 = np.abs(dy[r.argmin()] - dy[0])
+        # r = np.sqrt((dx.astype(float) - dx[0]) **
+        #             2 + (dy.astype(float) - dy[0]) ** 2)
+        # r[0] = r.max()  # avoiding minimum at itself
+        # # first candidate
+        # dx_1 = np.abs(dx[r.argmin()] - dx[0])
+        # dy_1 = np.abs(dy[r.argmin()] - dy[0])
+        # # second candidate
+        # r[r.argmin()] = r.max()
+        # dx_2 = np.abs(dx[r.argmin()] - dx[0])
+        # dy_2 = np.abs(dy[r.argmin()] - dy[0])
 
-        delta_x, delta_y = np.max([dx_1, dx_2]), np.max([dy_1, dy_2])
+        t_x = dx[1:] - dx[:-1]
+        corners = np.where(t_x == 0)[0]
+        t_y = dy[corners + 1] - dy[corners]
+
+        delta_x = np.median(np.abs(t_x))
+        delta_y = np.median(np.abs(t_y))
+
+        # delta_x, delta_y = np.max([dx_1, dx_2]), np.max([dy_1, dy_2])
         log.debug(
             "Section %s delta_x : %s , delta_y: %s",
             self._section.name,
@@ -237,7 +244,7 @@ class Section:
 
                 # trying to do always positive displacements
 
-                if (desp[0] < -1000) or (desp[1] < -1000):
+                if (desp[0] < -100) or (desp[1] < -100):
                     desp[0] *= -1
                     desp[1] *= -1
                     obj_img = i
@@ -370,28 +377,28 @@ class Section:
         short_displacement_y = np.nanmean(np.abs(px_y))
 
         ii = np.where(
-            (np.abs(px_x) < short_displacement_x)
-            & (np.abs(px_y) > short_displacement_y)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_x) < short_displacement_x) &
+            (np.abs(px_y) > short_displacement_y) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
         ii = np.where(
-            (np.abs(px_y) < short_displacement_y)
-            & (np.abs(px_x) > short_displacement_x)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_y) < short_displacement_y) &
+            (np.abs(px_x) > short_displacement_x) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -467,8 +474,8 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0 *
-                                            default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0
+                                            * default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -477,14 +484,14 @@ class Section:
                             # the other direction
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][0]
-                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
+                                    self._px[f"{ref_img}:{this_img}"][0] -
+                                    self._mu[f"{ref_img}:{this_img}"][0] / scale_x
                                 ) **
                                 2
                             )
                         else:
-                            default_desp = [-1.0 *
-                                            default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0
+                                            * default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
@@ -497,8 +504,8 @@ class Section:
 
                             err_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][1]
-                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
+                                    self._px[f"{ref_img}:{this_img}"][1] -
+                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 ) **
                                 2
                             )
@@ -506,12 +513,12 @@ class Section:
                         if err_px < Settings.allowed_error_px:
                             # Dimensions in the mosaic and images have opposite directions
                             temp_pos[0].append(
-                                abs_pos[ref_img, 0]
-                                + self._px[f"{ref_img}:{this_img}"][0]
+                                abs_pos[ref_img, 0] +
+                                self._px[f"{ref_img}:{this_img}"][0]
                             )
                             temp_pos[1].append(
-                                abs_pos[ref_img, 1]
-                                + self._px[f"{ref_img}:{this_img}"][1]
+                                abs_pos[ref_img, 1] +
+                                self._px[f"{ref_img}:{this_img}"][1]
                             )
                             temp_err.append(
                                 1.0
@@ -582,12 +589,12 @@ class Section:
         if self.stage_size[0] == 0:
 
             shape_0 = int(
-                np.array(abs_pos[:, 0]).max()
-                - np.array(abs_pos[:, 0]).min()
+                np.array(abs_pos[:, 0]).max() -
+                np.array(abs_pos[:, 0]).min()
             ) + self.shape[0]
             shape_1 = int(
-                np.array(abs_pos[:, 1]).max()
-                - np.array(abs_pos[:, 1]).min()
+                np.array(abs_pos[:, 1]).max() -
+                np.array(abs_pos[:, 1]).min()
             ) + self.shape[1]
 
             # this has to be a multiple of the chunk size
@@ -637,12 +644,12 @@ class Section:
             )
             raw = (raw + 10) * 1_000
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]) *
+                100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]) *
+                100
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
