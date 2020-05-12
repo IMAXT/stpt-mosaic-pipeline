@@ -101,10 +101,8 @@ def preprocess(input_dir: Path, output: Path, nparallel: int = 1):
     """
     ds = xr.Dataset()
     ds.to_zarr(output, mode='w')
-    #sections = sorted(input_dir.glob('S???'))
-    #
-    # debug
-    sections = sorted(input_dir.glob('S001'))
+
+    sections = sorted(input_dir.glob('S???'))
 
     client = Client.current()
     j = nparallel if len(sections) > nparallel else len(sections)

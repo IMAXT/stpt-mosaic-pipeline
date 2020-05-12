@@ -105,7 +105,9 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
         channels = []
         for j in arr.channel:
             im = arr.sel(tile=i, channel=j) / Settings.norm_val
+
             n = int(j.values)
+
             d = dark[n] / Settings.norm_val
             f = flat[n]
             img = da.stack(
@@ -164,7 +166,6 @@ def distort(
     ds = xr.Dataset()
     ds.to_zarr(output, mode="w")
 
-    # debug
     flat = read_calib(flat_file).persist()
 
     dark = read_calib(dark_file).persist()

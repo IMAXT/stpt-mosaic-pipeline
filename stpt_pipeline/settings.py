@@ -49,9 +49,9 @@ class Settings:
     """Relative tolerance for convergence when calculating offsets
     """
 
-    mosaic_scale = 5.55  # mosaic displacement units to pixel
+    mosaic_scale = 5.57  # mosaic displacement units to pixel
 
-    allowed_error_px = 5
+    # allowed_error_px = 5.
     """allowed pixel difference when comparing measured disp with mosaic
     """
 
