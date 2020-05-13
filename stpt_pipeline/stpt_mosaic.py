@@ -57,8 +57,8 @@ def cwrite(im, conf, abs_err, xslice, yslice, big_picture, overlap, pos_err):
     mos = im.data * conf
     big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
     overlap[yslice, xslice] = overlap[yslice, xslice] + conf
-    pos_err[yslice, xslice] = pos_err[yslice, xslice] + \
-        np.sqrt(np.sum(np.array(abs_err)**2))
+    pos_err[yslice, xslice] = pos_err[yslice, xslice] + conf * \
+        np.sum(np.array(abs_err)**2)
 
 
 def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
