@@ -190,7 +190,7 @@ class Section:
 
         dx0 = np.round((dx - dx.min()) / delta_x).astype(int)
         dy0 = np.round((dy - dy.min()) / delta_y).astype(int)
-        return (dx0, dy0)
+        return (dx0, dy0, delta_x, delta_y)
 
     def get_mos_pos(self) -> np.ndarray:
         """Find the mosaic grid
@@ -222,8 +222,21 @@ class Section:
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
 
-        dx0, dy0 = self.find_grid()
+        dx0, dy0, delta_x, delta_y = self.find_grid()
         dx_mos, dy_mos = self.get_mos_pos()
+
+        # If the default displacements are too large
+        # to for overlaps, stick with the default scale
+        self.offset_mode = 'sampled'
+
+        if delta_x / Settings.mosaic_scale > 1950.:
+            log.info('Displacement in X too large: {0:.1f}'.format(
+                delta_x / Settings.mosaic_scale))
+            self.offset_mode = 'default'
+        if delta_y / Settings.mosaic_scale > 1950.:
+            log.info('Displacement in Y too large: {0:.1f}'.format(
+                delta_y / Settings.mosaic_scale))
+            self.offset_mode = 'default'
 
         for i, img in enumerate(img_cube):
             r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
@@ -267,31 +280,53 @@ class Section:
                     desp[0],
                     desp[1],
                 )
+                if self.offset_mode == 'sampled':
+                    res = delayed(find_overlap_conf)(
+                        im_ref.data, im_obj.data, dist_conf, dist_conf, desp
+                    )
+                    results.append(_sink(ref_img, obj_img, res, sign))
 
-                res = delayed(find_overlap_conf)(
-                    im_ref.data, im_obj.data, dist_conf, dist_conf, desp
+                else:
+                    results.append(ref_img, obj_img, desp[0], desp[1], sign)
+
+        if self.offset_mode == 'sampled':
+            futures = client.compute(results)
+            offsets = []
+            for fut in as_completed(futures):
+                i, j, res, sign = fut.result()
+                dx, dy, mi, avf = res.x, res.y, res.mi, res.avg_flux
+
+                offsets.append([i, j, res, sign])
+
+                log.debug(
+                    "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
+                    self._section.name,
+                    i,
+                    j,
+                    dx,
+                    dy,
+                    mi,
+                    avf,
+                    sign,
                 )
+        else:
+            offsets = []
+            for t in results:
+                i, j, dx, dy, res, sign = t
 
-                results.append(_sink(ref_img, obj_img, res, sign))
+                offsets.append([i, j, res, sign])
 
-        futures = client.compute(results)
-        offsets = []
-        for fut in as_completed(futures):
-            i, j, res, sign = fut.result()
-            dx, dy, mi, avf = res.x, res.y, res.mi, res.avg_flux
-            offsets.append([i, j, res, sign])
-            log.debug(
-                "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
-                self._section.name,
-                i,
-                j,
-                dx,
-                dy,
-                mi,
-                avf,
-                sign,
-            )
-
+                log.debug(
+                    "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
+                    self._section.name,
+                    i,
+                    j,
+                    dx,
+                    dy,
+                    0.0,
+                    0.0,
+                    sign,
+                )
         self._offsets = offsets
 
     @property
@@ -570,9 +605,37 @@ class Section:
         """Compute absolute positions of images in the field of view.
         """
         log.info("Processing section %s", self._section.name)
+
+        img_cube = self.get_img_section(0, 1)
+        img_cube_stack = da.stack(img_cube)
+        # ref image is the one with the max integrated flux
+        cube_totals = img_cube_stack.sum(axis=(1, 2))
+        cube_totals = cube_totals.compute()
+        cube_means = cube_totals / 2080.**2
+
+        absolute_ref_img = cube_means.argmax()
+
+        if self.offset_mode == 'default':
+            dx = np.array(self["XPos"])
+            dy = np.array(self["YPos"])
+
+            abs_pos = []
+            abs_err = []
+
+            for i in range(len(dx)):
+                abs_pos.append([
+                    (dx[i] - dx[absolute_ref_img]) / Settings.mosaic_scale,
+                    (dy[i] - dy[absolute_ref_img]) / Settings.mosaic_scale
+                ])
+                abs_err.append([15., 15.])
+
+            log.info('Displacements too large, resorting to default grid')
+
+            return abs_pos, abs_err
+
         self.compute_pairs()
         scale_x, scale_y = self.scale
-        dx0, dy0 = self.find_grid()
+        dx0, dy0, delta_x, delta_y = self.find_grid()
         default_x, dev_x, default_y, dev_y = self.get_default_displacement()
 
         # get error threshold scomparing scaled micron displacements
@@ -602,15 +665,6 @@ class Section:
         error_short_threshold = 3.0 * np.max([eshortx, eshorty])
         log.debug('Scaling error threshold: l:{0:3f} s:{1:.3f}'.format(
             error_long_threshold, error_short_threshold))
-
-        img_cube = self.get_img_section(0, 1)
-        img_cube_stack = da.stack(img_cube)
-        # ref image is the one with the max integrated flux
-        cube_totals = img_cube_stack.sum(axis=(1, 2))
-        cube_totals = cube_totals.compute()
-        cube_means = cube_totals / 2080.**2
-
-        absolute_ref_img = cube_means.argmax()
 
         accumulated_pos = []
         accumulated_qual = []
@@ -651,153 +705,6 @@ class Section:
             log.info('  {0:d}: {1:.2f},{2:.2f}'.format(i, *t))
             i += 1
 
-        return abs_pos, abs_err
-
-    def compute_abspos_old(self):  # noqa: C901
-        """Compute absolute positions of images in the field of view.
-        """
-        log.info("Processing section %s", self._section.name)
-        self.compute_pairs()
-        scale_x, scale_y = self.scale
-
-        img_cube = self.get_img_section(0, 1)
-        img_cube_stack = da.stack(img_cube)
-        # ref image is the one with the max integrated flux
-        ref_img_assemble = img_cube_stack.sum(axis=(1, 2)).argmax()
-        ref_img_assemble = ref_img_assemble.compute()
-        # ref_img_assemble = 0
-        log.debug("Reference image %d", ref_img_assemble)
-        dx0, dy0 = self.find_grid()
-        default_x, dev_x, default_y, dev_y = self.get_default_displacement()
-
-        abs_pos = np.zeros((len(dx0), 2))
-        abs_pos[ref_img_assemble] = [0.0, 0.0]
-        abs_err = np.zeros(len(dx0))
-        abs_err[ref_img_assemble] = 0.0
-        fixed_pos = [ref_img_assemble]
-        pos_quality = np.zeros(len(dx0))
-        pos_quality[ref_img_assemble] = 1.0
-        # now for every fixed, see which ones overlap
-        done = 1.0
-        for i in fixed_pos:
-            r = np.sqrt((dx0 - dx0[i]) ** 2 + (dy0 - dy0[i]) ** 2)
-            i_t = np.where(r == 1)[0].tolist()
-
-            for this_img in i_t:
-                if this_img in fixed_pos:
-                    continue
-
-                # Now to calculate the final disp, we have to check
-                # if this has been measured more than once
-                temp_pos = [[], []]
-                temp_err = []
-                weight = []
-                temp_qual = []
-                prov_im = []
-                for ref_img in fixed_pos:
-                    desp_grid_x = dx0[ref_img] - dx0[this_img]
-                    desp_grid_y = dy0[ref_img] - dy0[this_img]
-
-                    if desp_grid_x ** 2 + desp_grid_y ** 2 == 1.0:
-
-                        if desp_grid_x ** 2 > desp_grid_y ** 2:
-                            # x displacement
-                            default_desp = [-1.0 *
-                                            default_x[0], -1.0 * default_x[1]]
-                            if desp_grid_x < 0:
-                                default_desp = [default_x[0], default_x[1]]
-                            # only differences in the long displacement
-                            # matter to see whether find_disp worked or not,
-                            # as sometimes there are systematic differences in
-                            # the other direction
-                            err_px = np.sqrt(
-                                (
-                                    self._px[f"{ref_img}:{this_img}"][0]
-                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
-                                ) **
-                                2
-                            )
-                        else:
-                            default_desp = [-1.0 *
-                                            default_y[0], -1.0 * default_y[1]]
-                            if desp_grid_y < 0:
-                                default_desp = [default_y[0], default_y[1]]
-                            # In the first column the displacement
-                            # is offset from the rest of the sample by an unknown
-                            # amount, so it is better to keep what is in the mosaic
-                            if (dy0[ref_img] == 0.0) | (dy0[this_img] == 0.0):
-                                default_desp[1] = (
-                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
-                                )
-
-                            err_px = np.sqrt(
-                                (
-                                    self._px[f"{ref_img}:{this_img}"][1]
-                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
-                                ) **
-                                2
-                            )
-
-                        if err_px < Settings.allowed_error_px:
-                            # Dimensions in the mosaic and images have opposite directions
-                            temp_pos[0].append(
-                                abs_pos[ref_img, 0]
-                                + self._px[f"{ref_img}:{this_img}"][0]
-                            )
-                            temp_pos[1].append(
-                                abs_pos[ref_img, 1]
-                                + self._px[f"{ref_img}:{this_img}"][1]
-                            )
-                            temp_err.append(
-                                1.0
-                            )  # this seems to be the error for good pairs
-                            # weights
-                            weight.append(
-                                self._avg[f"{ref_img}:{this_img}"] ** 2)
-                            temp_qual.append(pos_quality[ref_img])
-                            prov_im.append(ref_img)
-                        else:
-                            temp_pos[0].append(
-                                abs_pos[ref_img, 0] + default_desp[0])
-                            temp_pos[1].append(
-                                abs_pos[ref_img, 1] + default_desp[1])
-                            temp_err.append(Settings.allowed_error_px ** 2)
-                            weight.append(0.01 ** 2)  # artificially low weight
-                            temp_qual.append(0.1)
-                            prov_im.append(-1.0 * ref_img)
-
-                weight = np.array(weight) * np.array(temp_qual)
-
-                abs_pos[this_img, 0] = int(
-                    np.round(
-                        (np.array(temp_pos[0]) * weight).sum() / weight.sum())
-                )
-                abs_pos[this_img, 1] = int(
-                    np.round(
-                        (np.array(temp_pos[1]) * weight).sum() / weight.sum())
-                )
-                abs_err[this_img] = np.sqrt(
-                    (np.array(temp_err) * weight).sum() / weight.sum()
-                )
-                # this image has been fixed
-                fixed_pos.append(this_img)
-                pos_quality[this_img] = np.mean(temp_qual)
-                done += 1
-
-                prov_str = ""
-                for im_temp in prov_im:
-                    prov_str += "{0:+02d}".format(int(im_temp))
-                log.debug(
-                    "Done Img %d from %s with quality %f",
-                    this_img,
-                    prov_str,
-                    np.mean(temp_qual),
-                )
-            if done == len(dx0):
-                break
-
-        self._section.attrs["abs_pos"] = abs_pos.tolist()
-        self._section.attrs["pos_quality"] = pos_quality.tolist()
         return abs_pos, abs_err
 
     def stitch(self, output: Path):
