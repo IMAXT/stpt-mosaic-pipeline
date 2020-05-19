@@ -287,7 +287,10 @@ class Section:
                     results.append(_sink(ref_img, obj_img, res, sign))
 
                 else:
-                    results.append(ref_img, obj_img, desp[0], desp[1], sign)
+                    results.append([
+                        ref_img, obj_img,
+                        desp[0], desp[1], sign
+                    ])
 
         if self.offset_mode == 'sampled':
             futures = client.compute(results)
@@ -312,9 +315,9 @@ class Section:
         else:
             offsets = []
             for t in results:
-                i, j, dx, dy, res, sign = t
+                i, j, dx, dy, sign = t
 
-                offsets.append([i, j, res, sign])
+                offsets.append([i, j, [dx, dy, 0., 0.], sign])
 
                 log.debug(
                     "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
@@ -413,28 +416,28 @@ class Section:
         short_displacement_y = np.nanmean(np.abs(px_y))
 
         ii = np.where(
-            (np.abs(px_x) < short_displacement_x)
-            & (np.abs(px_y) > short_displacement_y)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_x) < short_displacement_x) &
+            (np.abs(px_y) > short_displacement_y) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
         ii = np.where(
-            (np.abs(px_y) < short_displacement_y)
-            & (np.abs(px_x) > short_displacement_x)
-            & (avg_flux > np.median(avg_flux))
+            (np.abs(px_y) < short_displacement_y) &
+            (np.abs(px_x) > short_displacement_x) &
+            (avg_flux > np.median(avg_flux))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum()
+            / (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -519,14 +522,14 @@ class Section:
                             # the other direction
                             err_long_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][0]
-                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
+                                    self._px[f"{ref_img}:{this_img}"][0] -
+                                    self._mu[f"{ref_img}:{this_img}"][0] / scale_x
                                 ) ** 2
                             )
                             err_short_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][1]
-                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
+                                    self._px[f"{ref_img}:{this_img}"][1] -
+                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 ) ** 2
                             )
 
@@ -547,27 +550,27 @@ class Section:
 
                             err_long_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][1]
-                                    - self._mu[f"{ref_img}:{this_img}"][1] / scale_y
-                                )
-                                ** 2
+                                    self._px[f"{ref_img}:{this_img}"][1] -
+                                    self._mu[f"{ref_img}:{this_img}"][1] / scale_y
+                                ) **
+                                2
                             )
                             err_short_px = np.sqrt(
                                 (
-                                    self._px[f"{ref_img}:{this_img}"][0]
-                                    - self._mu[f"{ref_img}:{this_img}"][0] / scale_x
+                                    self._px[f"{ref_img}:{this_img}"][0] -
+                                    self._mu[f"{ref_img}:{this_img}"][0] / scale_x
                                 ) ** 2
                             )
 
                     if (err_long_px < error_long_threshold) & (err_short_px < error_short_threshold):
                         # Dimensions in the mosaic and images have opposite directions
                         temp_pos[0].append(
-                            abs_pos[ref_img, 0]
-                            + self._px[f"{ref_img}:{this_img}"][0]
+                            abs_pos[ref_img, 0] +
+                            self._px[f"{ref_img}:{this_img}"][0]
                         )
                         temp_pos[1].append(
-                            abs_pos[ref_img, 1]
-                            + self._px[f"{ref_img}:{this_img}"][1]
+                            abs_pos[ref_img, 1] +
+                            self._px[f"{ref_img}:{this_img}"][1]
                         )
                         # weights
                         weight.append(
@@ -631,6 +634,22 @@ class Section:
 
             log.info('Displacements too large, resorting to default grid')
 
+            abs_pos = np.array(abs_pos)
+            abs_err = np.array(abs_err)
+
+            self._section.attrs["abs_pos"] = abs_pos.tolist()
+            self._section.attrs["abs_err"] = abs_err.tolist()
+            self._section.attrs["default_displacements"] = [
+                {
+                    "default_x": 0.0,
+                    "dev_x": 0.0,
+                    "default_y": 0.0,
+                    "dev_y": 0.0,
+                }
+            ]
+            self._x_scale = Settings.mosaic_scale
+            self._y_scale = Settings.mosaic_scale
+
             return abs_pos, abs_err
 
         self.compute_pairs()
@@ -661,8 +680,8 @@ class Section:
         elongy = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
         eshortx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
 
-        error_long_threshold = 3.0 * np.max([elongx, elongy])
-        error_short_threshold = 3.0 * np.max([eshortx, eshorty])
+        error_long_threshold = 3.0 * np.max([elongx, elongy]).clip(2, 30)
+        error_short_threshold = 3.0 * np.max([eshortx, eshorty]).clip(2, 30)
         log.debug('Scaling error threshold: l:{0:3f} s:{1:.3f}'.format(
             error_long_threshold, error_short_threshold))
 
@@ -682,8 +701,8 @@ class Section:
             # adding quality of global reference
             accumulated_qual.append(
                 np.sqrt(
-                    np.array(temp[1]) ** 2 +
-                    np.array(temp[1])[absolute_ref_img] ** 2
+                    np.array(temp[1]) ** 2
+                    + np.array(temp[1])[absolute_ref_img] ** 2
                 )
             )
 
@@ -699,11 +718,6 @@ class Section:
 
         self._section.attrs["abs_pos"] = abs_pos.tolist()
         self._section.attrs["abs_err"] = abs_err.tolist()
-
-        i = 0
-        for t in abs_pos.tolist():
-            log.info('  {0:d}: {1:.2f},{2:.2f}'.format(i, *t))
-            i += 1
 
         return abs_pos, abs_err
 
@@ -724,12 +738,12 @@ class Section:
         if self.stage_size[0] == 0:
 
             shape_0 = int(
-                np.array(abs_pos[:, 0]).max()
-                - np.array(abs_pos[:, 0]).min()
+                np.array(abs_pos[:, 0]).max() -
+                np.array(abs_pos[:, 0]).min()
             ) + self.shape[0]
             shape_1 = int(
-                np.array(abs_pos[:, 1]).max()
-                - np.array(abs_pos[:, 1]).min()
+                np.array(abs_pos[:, 1]).max() -
+                np.array(abs_pos[:, 1]).min()
             ) + self.shape[1]
 
             # this has to be a multiple of the chunk size
@@ -746,9 +760,7 @@ class Section:
 
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
-        # debug
-        # for sl in range(self.slices):
-        for sl in [0]:
+        for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
                 g = z.create_group(
@@ -780,12 +792,12 @@ class Section:
             )
             raw = (raw + 10) * 1_000
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()]) *
+                100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
-                * 100
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()]) *
+                100
             )
             mos_overlap.append(overlap)
             mos_err.append(err)
@@ -815,6 +827,8 @@ class Section:
         raw.attrs["abs_err"] = self._section.attrs["abs_err"]
         raw.attrs["offsets"] = self._offsets
         raw.attrs["scale"] = [self._x_scale, self._y_scale]
+
+        raw.attrs["offset_mode"] = self.offset_mode
 
         ds = xr.Dataset({self._section.name: raw})
         ds.to_zarr(output / "mos1.zarr", mode="a")
