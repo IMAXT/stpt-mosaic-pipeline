@@ -769,14 +769,7 @@ class Section:
                               out=g, out_shape=self.stage_size)
                 results.append(res)
 
-        # Now when _mosaic is done the file is already written,
-        # so this block thros an error
-        # futures = client.compute(results)
-        # for fut in as_completed(futures):
-        #     res = fut.result()
-        #     log.debug("Temporary mosaic saved %s", res)
-
-        log.debug("Temporary mosaic saved %s", res)
+                log.debug("Temporary mosaic saved %s", res)
 
         # Move mosaic to final destination with correct format
         mos_overlap = []
