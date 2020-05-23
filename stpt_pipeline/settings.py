@@ -42,6 +42,9 @@ class Settings:
     """distortion coefficients (filled in from the configuration at runtime)
     """
 
+    scales = [2, 4, 8, 16, 32]
+    """default downsample scales"""
+
     normal_x = 1000
     normal_y = 1000
 

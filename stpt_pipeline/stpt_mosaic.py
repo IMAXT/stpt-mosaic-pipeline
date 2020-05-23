@@ -3,7 +3,6 @@ import traceback
 from pathlib import Path
 from typing import List, Tuple
 
-import cv2
 import dask
 import dask.array as da
 import numpy as np
@@ -16,6 +15,7 @@ import zarr
 from imaxt_image.external.tifffile import TiffWriter
 from imaxt_image.registration import find_overlap_conf
 
+from . import ops
 from .geometric_distortion import apply_geometric_transform, read_calib
 from .retry import retry
 from .settings import Settings
@@ -827,8 +827,8 @@ class Section:
         raw.attrs["offset_mode"] = self.offset_mode
 
         ds = xr.Dataset({self._section.name: raw})
-        ds.to_zarr(output / "mos1.zarr", mode="a")
-        log.info("Mosaic saved %s", output / "mos1.zarr")
+        ds.to_zarr(output / "mos.zarr", mode="a")
+        log.info("Mosaic saved %s", output / "mos.zarr")
 
 
 class STPTMosaic:
@@ -850,7 +850,7 @@ class STPTMosaic:
 
     def initialize_storage(self, output: Path):
         ds = xr.Dataset()
-        ds.to_zarr(output / "mos1.zarr", mode="w")
+        ds.to_zarr(output / "mos.zarr", mode="w")
 
     def sections(self):
         """Sections generator
@@ -858,64 +858,42 @@ class STPTMosaic:
         for section in self._ds:
             yield Section(self._ds[section])
 
-    def downsample(self, output: Path, scales: List[int] = None):
+    def downsample(self, output: Path):
         """Downsample mosaic.
 
         Parameters
         ----------
         output
             Location of output directory
-        scales
-            List of scales to produce. Default is
-            [2, 4, 8, 16]
         """
         log.info("Downsampling mosaics")
-        up = output / "mos1.zarr"
-        if scales is None:
-            scales = [2, 4, 8, 16]
-        for factor in scales:
+        store_name = output / "mos.zarr"
+        store = zarr.DirectoryStore(store_name)
+        up = ""
+        for factor in Settings.scales:
             log.debug("Downsampling factor %d", factor)
-            down = output / f"mos{factor}.zarr"
-            ds = xr.open_zarr(f"{up}")
+            ds = xr.open_zarr(f"{store_name}", group=up)
             nds = xr.Dataset()
-            nds.to_zarr(down, "w")
+            down = f"l.{factor}"
+            nds.to_zarr(store, mode="w", group=down)
 
-            for s in list(ds):
-                log.debug("Downsampling mos%d [%s]", factor, s)
+            slices = list(ds)
+            for s in slices:
                 nds = xr.Dataset()
-                arr = ds[s]
-                nt, nz, nch, ny, nx = tuple(c[0] for c in arr.chunks)
-                arr_t = []
-                for t in arr.type:
-                    arr_z = []
-                    for z in arr.z:
-                        arr_ch = []
-                        for ch in arr.channel:
-                            im = arr.sel(z=z.values, type=t.values, channel=ch.values)
-                            res = im.data.map_blocks(
-                                cv2.pyrDown, chunks=(ny // 2, nx // 2)
-                            )
-                            arr_ch.append(res)
-                        arr_z.append(da.stack(arr_ch))
-                    arr_t.append(da.stack(arr_z))
-                arr_t = da.stack(arr_t)
-                nt, nz, nch, ny, nx = arr_t.shape
-                narr = xr.DataArray(
-                    arr_t.astype("uint16"),
-                    dims=("type", "z", "channel", "y", "x"),
-                    coords={
-                        "channel": range(1, nch + 1),
-                        "type": ["mosaic", "conf", "err"],
-                        "x": range(nx),
-                        "y": range(ny),
-                        "z": range(nz),
-                    },
-                )
+                log.debug("Downsampling mos%d [%s]", factor, s)
+                narr = ops.downsample(ds[s])
                 nds[s] = narr
-                nds.to_zarr(down, mode="a")
-            log.info("Downsampled mosaic saved %s", down)
-
+                nds.to_zarr(store, mode="a", group=down)
+            log.info("Downsampled mosaic saved %s:%s", store_name, down)
             up = down
+        arr = zarr.open(f'{store_name}', mode='r+')
+        arr.attrs['multiscale'] = {'datasets': [{'path': '', 'level': 1},
+                                                {'path': 'l.2', 'level': 2},
+                                                {'path': 'l.4', 'level': 4},
+                                                {'path': 'l.8', 'level': 8},
+                                                {'path': 'l.16', 'level': 16},
+                                                {'path': 'l.32', 'level': 32}],
+                                   'metadata': {'method': 'cv2.pyrDown'}}
 
     def to_tiff(self, output: Path, scales: List[int] = None):
         """Export mosaic to TIFF format.
@@ -931,8 +909,8 @@ class STPTMosaic:
         if scales is None:
             scales = [16, 8, 4, 2, 1]
         for scl in scales:
-            arr = f"{output}/mos{scl}.zarr"
-            ds = xr.open_zarr(arr)
+            arr = f"{output}/mos.zarr"
+            ds = xr.open_zarr(arr, group=f"l.{scl}")
             files = []
             for section in list(ds):
                 files = []
