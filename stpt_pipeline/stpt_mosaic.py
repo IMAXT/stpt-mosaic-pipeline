@@ -44,7 +44,7 @@ def arr2tiff(output, arr, scl):
 def _get_image(group, imgtype, shape, dtype="float32"):
     try:
         arr = group.create_dataset(
-            imgtype, shape=shape, chunks=(2080, 2080), dtype=dtype
+            imgtype, shape=shape, chunks=(520, 520), dtype=dtype
         )
     except ValueError:
         arr = group[imgtype]
