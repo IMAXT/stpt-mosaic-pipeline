@@ -1,3 +1,4 @@
+
 import logging
 import traceback
 from pathlib import Path
@@ -32,7 +33,7 @@ def _sink(*args):
 def arr2tiff(output, arr, scl):
     ch = str(arr.channel.values)
     z = str(arr.z.values)
-    p = Path(f"{output}/tiff/mos{scl}/{arr.name}/Z{z}")
+    p = Path(f"{output}/tiff/mos{scl}/")
     p.mkdir(exist_ok=True, parents=True)
     filename = p / f"{output.name}-{arr.name}-z{z}-ch{ch}.tif"
     with TiffWriter(f"{filename}") as writer:
