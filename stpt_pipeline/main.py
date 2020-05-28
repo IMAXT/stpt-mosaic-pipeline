@@ -42,31 +42,33 @@ def main(  # noqa: C901
     # TODO: compute dark and flat
 
     # Geometric distortion
-    out_dis = basedir / "dis.zarr"
+    out_dis = output_dir_full / "dis.zarr"
     if "distortion" in recipes:
         if not out.exists():
             raise FileNotFoundError(f"Preprocessed data not found in {out}")
         distort(out, Settings.dark_file, Settings.flat_file, out_dis)
 
+    if not out_dis.exists():
+        raise FileNotFoundError(f"Distortion corrected data not found in {out_dis}")
+
     mos = STPTMosaic(out_dis)
     if "mosaic" in recipes:
-        if not out_dis.exists():
-            raise FileNotFoundError(
-                f"Distortion corrected data not found in {out_dis}")
-        mos.initialize_storage(basedir)
+        mos.initialize_storage(output_dir_full)
 
         for section in mos.sections():
             # initialize stage size:
             section.stage_size = mos.stage_size
 
             section.find_offsets()
-            section.stitch(basedir)
+            section.stitch(output_dir_full)
 
             # after the first section, stage size is fixed:
             mos.stage_size = section.stage_size
 
     if "downsample" in recipes:
-        mos.downsample(basedir)
+        mos.downsample(output_dir_full)
 
     if "tiff" in recipes:
-        mos.to_tiff(basedir)
+        mos.to_tiff(output_dir_full)
+
+    logger.info("Pipeline completed")
