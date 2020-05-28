@@ -1,13 +1,14 @@
-import logging
 from pathlib import Path
 from typing import Dict, List
+
+import owl_dev
+import owl_dev.config
+from owl_dev.logging import logger
 
 from .geometric_distortion import distort
 from .preprocess import preprocess
 from .settings import Settings
 from .stpt_mosaic import STPTMosaic
-
-log = logging.getLogger("owl.daemon.pipeline")
 
 
 def main(  # noqa: C901
@@ -22,13 +23,17 @@ def main(  # noqa: C901
     output_dir : Path
         [description]
     """
+    logger.info("Pipeline started")
+
+    output_dir_full = output_dir / root_dir.name
+    owl_dev.config.set({"output_dir": f"{output_dir_full}"})
+    owl_dev.setup(main.config)
+
     if cof_dist is not None:
         Settings.cof_dist = cof_dist
 
-    # TODO: This to me moved outside the pipeline
-    basedir = output_dir / root_dir.name
-    basedir.mkdir(exist_ok=True, parents=True)
-    out = basedir / "raw.zarr"
+    # TODO: Preprocessing to me moved outside the pipeline
+    out = output_dir_full / "raw.zarr"
     if "preprocess" in recipes:
         if not root_dir.exists():
             raise FileNotFoundError(f"Directory {root_dir} does not exist.")

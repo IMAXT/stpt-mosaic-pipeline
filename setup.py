@@ -18,6 +18,7 @@ requirements = [
     "voluptuous",
     "xarray",
     "opencv-python",
+    "owl-pipeline-develop",
 ]
 
 setup_requirements = ["pytest-runner", "flake8"]
