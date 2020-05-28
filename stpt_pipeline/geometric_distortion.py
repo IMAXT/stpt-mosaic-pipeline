@@ -1,4 +1,3 @@
-import logging
 import traceback
 from functools import partial
 from pathlib import Path
@@ -7,16 +6,16 @@ from typing import Dict, List
 import dask.array as da
 import scipy.ndimage as ndimage
 import xarray as xr
-import zarr
 from dask import delayed
 from distributed import Client, as_completed
+
+import zarr
+from owl_dev.logging import logger
 
 from .retry import retry
 from .settings import Settings
 from .stpt_displacement import mask_image
 from .utils import get_coords
-
-log = logging.getLogger("owl.daemon.pipeline")
 
 
 def read_calib(cal_file: Path) -> xr.DataArray:
@@ -50,7 +49,7 @@ def read_calib(cal_file: Path) -> xr.DataArray:
         arr.to_netcdf('flat.nc')
 
     """
-    log.debug("Reading calibration file %s", cal_file)
+    logger.debug("Reading calibration file %s", cal_file)
     cal = xr.open_dataarray(f"{cal_file}")
     return da.from_array(cal.values)
 
@@ -98,7 +97,7 @@ def apply_geometric_transform(
 
 @retry(Exception)
 def _write_dataset(arr, *, dark, flat, output, cof_dist):
-    log.debug("Applying optical distortion and normalization %s", arr.name)
+    logger.debug("Applying optical distortion and normalization %s", arr.name)
     g = xr.Dataset()
     tiles = []
     for i in arr.tile:
@@ -182,13 +181,14 @@ def distort(
     seq = as_completed(futures)
     for fut in seq:
         if not fut.exception():
-            log.info("Saved %s", fut.result())
+            logger.info("Saved %s", fut.result())
             fut.cancel()
             if j < len(sections):
                 fut = client.submit(func, ds[sections[j]])
                 seq.add(fut)
                 j += 1
         else:
-            log.error("%s", fut.exception())
+            logger.error("%s", fut.exception())
             tb = fut.traceback()
-            log.error(traceback.format_tb(tb))
+            logger.error(traceback.format_tb(tb))
+            raise
