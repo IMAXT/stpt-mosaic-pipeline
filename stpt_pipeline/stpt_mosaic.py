@@ -97,9 +97,9 @@ class Section:
         Zarr group containing the section data
     """
 
-    def __init__(self, section: xr.DataArray):
+    def __init__(self, section: xr.DataArray, stage_size: List[int] =None):
         self._section = section
-        self.stage_size = [0, 0]
+        self.stage_size = stage_size
 
     def __getitem__(self, attr):
         res = self._section.attrs[attr]
@@ -737,7 +737,7 @@ class Section:
         # out_shape = (self["mrows"] * self.shape[0],
         #              self["mcolumns"] * self.shape[1])
 
-        if self.stage_size[0] == 0:
+        if self.stage_size is None:
 
             shape_0 = (
                 int(np.array(abs_pos[:, 0]).max() - np.array(abs_pos[:, 0]).min())
@@ -845,7 +845,7 @@ class STPTMosaic:
         # this is to carry over the mosaic size between
         # sections
 
-        self.stage_size = [0, 0]
+        self.stage_size = None
 
     def initialize_storage(self, output: Path):
         logger.info('Preparing mosaic output')
@@ -856,7 +856,7 @@ class STPTMosaic:
         """Sections generator
         """
         for section in self._ds:
-            yield Section(self._ds[section])
+            yield Section(self._ds[section], self.stage_size)
 
     def downsample(self, output: Path):
         """Downsample mosaic.

@@ -56,9 +56,6 @@ def main(  # noqa: C901
         mos.initialize_storage(output_dir_full)
 
         for section in mos.sections():
-            # initialize stage size:
-            section.stage_size = mos.stage_size
-
             section.find_offsets()
             section.stitch(output_dir_full)
 
