@@ -1,4 +1,3 @@
-
 import traceback
 from pathlib import Path
 from typing import List, Tuple
@@ -42,50 +41,38 @@ def arr2tiff(output, arr, scl):
 @retry(Exception)
 def _get_image(group, imgtype, shape, dtype="float32"):
     try:
-        arr = group.create_dataset(
-            imgtype, shape=shape, chunks=(520, 520), dtype=dtype
-        )
+        arr = group.create_dataset(imgtype, shape=shape, chunks=(520, 520), dtype=dtype)
     except ValueError:
         arr = group[imgtype]
-    logger.info("Image %s/%s created", arr, imgtype)
     return arr
 
 
 @delayed
-def cwrite(im, conf, abs_err, xslice, yslice, big_picture, overlap, pos_err):
-    mos = im.data * conf
-    big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
-    overlap[yslice, xslice] = overlap[yslice, xslice] + conf
-    pos_err[yslice, xslice] = pos_err[yslice, xslice] + conf * np.sum(
-        np.array(abs_err) ** 2
-    )
-
-
-def _mosaic(im_t, conf, abs_pos, abs_err, out=None, out_shape=None):
+def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None):
     assert out_shape is not None
-    assert out is not None
+    assert imgtype in ["raw", "pos_err", "overlap"]
     y_size, x_size = out_shape
     y_delta, x_delta = np.min(abs_pos, axis=0)
-    log.debug("Mosaic size: %dx%d", x_size, y_size)
-    big_picture = _get_image(out, "raw", (y_size, x_size), dtype="float32")
-    overlap = _get_image(out, "overlap", (y_size, x_size), dtype="float32")
-    pos_err = _get_image(out, "pos_err", (y_size, x_size), dtype="float32")
+    logger.debug("Mosaic size: %dx%d", x_size, y_size)
+    big_picture = np.zeros((y_size, x_size), dtype="float32")
+
     for i, im in enumerate(im_t):
         y0 = int(abs_pos[i, 0] - y_delta)
         x0 = int(abs_pos[i, 1] - x_delta)
         yslice = slice(y0, y0 + im.shape[0])
         xslice = slice(x0, x0 + im.shape[1])
-        # We do each image synchronously
-        # Better would be create a list of those that do not everlap,
-        # make a list of delayed and compute those, then fill the gaps
-        # with another list of non overlapping, etc.
-        try:
-            cwrite(
-                im, conf, abs_err[i], xslice, yslice, big_picture, overlap, pos_err
-            ).compute()
-        except Exception:
-            log.error(traceback.format_exc())
-    return out
+
+        if imgtype == "raw":
+            mos = im.data * conf
+            big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
+        elif imgtype == "overlap":
+            big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf
+        elif imgtype == "pos_err":
+            big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf * np.sum(
+                np.array(abs_err) ** 2
+            )
+
+    return big_picture
 
 
 class Section:
@@ -97,7 +84,7 @@ class Section:
         Zarr group containing the section data
     """
 
-    def __init__(self, section: xr.DataArray, stage_size: List[int] =None):
+    def __init__(self, section: xr.DataArray, stage_size: List[int] = None):
         self._section = section
         self.stage_size = stage_size
 
@@ -712,12 +699,6 @@ class Section:
 
         accumulated_pos = np.array(accumulated_pos)
         abs_pos = np.median(accumulated_pos, 0)
-
-        # t = np.argmax(accumulated_qual, 0)
-        # for i in range(len(t)):
-        #     abs_pos[i, 0] = accumulated_pos[t[i], i, 0]
-        #     abs_pos[i, 1] = accumulated_pos[t[i], i, 1]
-
         abs_err = np.std(accumulated_pos, 0)
 
         self._section.attrs["abs_pos"] = abs_pos.tolist()
@@ -725,55 +706,34 @@ class Section:
 
         return abs_pos, abs_err
 
-    def stitch(self, output: Path):
-        """Stitch and save all images
-        """
-        abs_pos, abs_err = self.compute_abspos()
-
-        conf = self.get_distconf()
-
-        # TODO: This is the start of staging support
-        # (i.e creating the mosaic in temp storage)
-        # out_shape = (self["mrows"] * self.shape[0],
-        #              self["mcolumns"] * self.shape[1])
-
-        if self.stage_size is None:
-
-            shape_0 = (
-                int(np.array(abs_pos[:, 0]).max() - np.array(abs_pos[:, 0]).min())
-                + self.shape[0]
-            )
-            shape_1 = (
-                int(np.array(abs_pos[:, 1]).max() - np.array(abs_pos[:, 1]).min())
-                + self.shape[1]
-            )
-
-            # this has to be a multiple of the chunk size
-            if shape_0 % 2080 != 0:
-                n_imgs = int(shape_0 / 2080.0) + 1
-                shape_0 = int(2080 * n_imgs)
-            if shape_1 % 2080 != 0:
-                n_imgs = int(shape_1 / 2080.0) + 1
-                shape_1 = int(2080 * n_imgs)
-
-            self.stage_size = (shape_0, shape_1)
-
-        results = []
-
+    def _create_temporary_mosaic(self, conf, abs_pos, abs_err, output):
+        logger.info("Preparing temporary mosaic")
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
                 g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
-                res = _mosaic(
-                    im_t, conf, abs_pos, abs_err, out=g, out_shape=self.stage_size
-                )
-                results.append(res)
+                results = []
+                for imgtype in ["raw", "pos_err", "overlap"]:
+                    res = _mosaic(
+                        im_t, conf, abs_pos, abs_err, imgtype, out_shape=self.stage_size
+                    )
+                    nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
+                    mos = da.from_delayed(res, self.stage_size, dtype="float32")
+                    mos = mos.rechunk((520, 520))
+                    st = mos.to_zarr(nimg, compute=False, return_stored=False)
+                    results.append(st)
+                futures = client.compute(results)
+                for fut in as_completed(futures):
+                    if fut.exception():
+                        logger.error(fut.exception())
+                        tb = fut.traceback()
+                        logger.error(traceback.format_tb(tb))
+        return z
 
-                log.debug("Temporary mosaic saved %s", res)
-
-        # Move mosaic to final destination with correct format
+    def _compute_final_mosaic(self, z):
+        logger.info("Creating final mosaic")
         mos_overlap = []
         mos_raw = []
         mos_err = []
@@ -815,17 +775,55 @@ class Section:
             },
         )
 
-        raw.attrs["default_displacements"] = self._section.attrs[
-            "default_displacements"
-        ]
-        raw.attrs["abs_pos"] = self._section.attrs["abs_pos"]
-        raw.attrs["abs_err"] = self._section.attrs["abs_err"]
-        raw.attrs["offsets"] = self._offsets
-        raw.attrs["scale"] = [self._x_scale, self._y_scale]
+        metadata = self._get_metadata()
+        raw.attrs.update(metadata)
 
-        raw.attrs["offset_mode"] = self.offset_mode
+        return raw
 
-        ds = xr.Dataset({self._section.name: raw})
+    def _get_metadata(self):
+        metadata = {
+            "default_displacements": self._section.attrs["default_displacements"],
+            "abs_pos": self._section.attrs["abs_pos"],
+            "abs_err": self._section.attrs["abs_err"],
+            "offsets": self._offsets,
+            "scale": [self._x_scale, self._y_scale],
+            "offset_mode": self.offset_mode,
+        }
+        return metadata
+
+    def _stage_size(self, abs_pos):
+        shape_0 = (
+            int(np.array(abs_pos[:, 0]).max() - np.array(abs_pos[:, 0]).min())
+            + self.shape[0]
+        )
+        shape_1 = (
+            int(np.array(abs_pos[:, 1]).max() - np.array(abs_pos[:, 1]).min())
+            + self.shape[1]
+        )
+
+        # this has to be a multiple of the chunk size
+        if shape_0 % 2080 != 0:
+            n_imgs = int(shape_0 / 2080.0) + 1
+            shape_0 = int(2080 * n_imgs)
+        if shape_1 % 2080 != 0:
+            n_imgs = int(shape_1 / 2080.0) + 1
+            shape_1 = int(2080 * n_imgs)
+
+        return (shape_0, shape_1)
+
+    def stitch(self, output: Path):
+        """Stitch and save all images
+        """
+        abs_pos, abs_err = self.compute_abspos()
+        conf = self.get_distconf()
+
+        if self.stage_size is None:
+            self.stage_size = self._stage_size(abs_pos)
+
+        z = self._create_temporary_mosaic(conf, abs_pos, abs_err, output)
+
+        arr = self._compute_final_mosaic(z)
+        ds = xr.Dataset({self._section.name: arr})
         ds.to_zarr(output / "mos.zarr", mode="a")
         logger.info("Mosaic saved %s", output / "mos.zarr")
 
@@ -844,11 +842,10 @@ class STPTMosaic:
 
         # this is to carry over the mosaic size between
         # sections
-
         self.stage_size = None
 
     def initialize_storage(self, output: Path):
-        logger.info('Preparing mosaic output')
+        logger.info("Preparing mosaic output")
         ds = xr.Dataset()
         ds.to_zarr(output / "mos.zarr", mode="w")
 
@@ -886,14 +883,18 @@ class STPTMosaic:
                 nds.to_zarr(store, mode="a", group=down)
             logger.info("Downsampled mosaic saved %s:%s", store_name, down)
             up = down
-        arr = zarr.open(f'{store_name}', mode='r+')
-        arr.attrs['multiscale'] = {'datasets': [{'path': '', 'level': 1},
-                                                {'path': 'l.2', 'level': 2},
-                                                {'path': 'l.4', 'level': 4},
-                                                {'path': 'l.8', 'level': 8},
-                                                {'path': 'l.16', 'level': 16},
-                                                {'path': 'l.32', 'level': 32}],
-                                   'metadata': {'method': 'cv2.pyrDown'}}
+        arr = zarr.open(f"{store_name}", mode="r+")
+        arr.attrs["multiscale"] = {
+            "datasets": [
+                {"path": "", "level": 1},
+                {"path": "l.2", "level": 2},
+                {"path": "l.4", "level": 4},
+                {"path": "l.8", "level": 8},
+                {"path": "l.16", "level": 16},
+                {"path": "l.32", "level": 32},
+            ],
+            "metadata": {"method": "cv2.pyrDown"},
+        }
 
     def to_tiff(self, output: Path, scales: List[int] = None):
         """Export mosaic to TIFF format.
