@@ -1,5 +1,4 @@
 
-import logging
 import traceback
 from pathlib import Path
 from typing import List, Tuple
@@ -15,13 +14,12 @@ from scipy.stats import median_absolute_deviation as mad
 import zarr
 from imaxt_image.external.tifffile import TiffWriter
 from imaxt_image.registration import find_overlap_conf
+from owl_dev.logging import logger
 
 from . import ops
 from .geometric_distortion import apply_geometric_transform, read_calib
 from .retry import retry
 from .settings import Settings
-
-log = logging.getLogger("owl.daemon.pipeline")
 
 
 @delayed
@@ -49,7 +47,7 @@ def _get_image(group, imgtype, shape, dtype="float32"):
         )
     except ValueError:
         arr = group[imgtype]
-    log.info("Image %s/%s created", arr, imgtype)
+    logger.info("Image %s/%s created", arr, imgtype)
     return arr
 
 
@@ -184,7 +182,7 @@ class Section:
         delta_y = np.median(np.abs(t_y))
 
         # delta_x, delta_y = np.max([dx_1, dx_2]), np.max([dy_1, dy_2])
-        log.debug(
+        logger.debug(
             "Section %s delta_x : %s , delta_y: %s",
             self._section.name,
             delta_x,
@@ -219,7 +217,7 @@ class Section:
         client = Client.current()
         # convert to find_shifts
         results = []
-        log.info("Processing section %s", self._section.name)
+        logger.info("Processing section %s", self._section.name)
         img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
 
         # Calculate confidence map. Only needs to be done once per section
@@ -233,14 +231,14 @@ class Section:
         self.offset_mode = "sampled"
 
         if delta_x / Settings.mosaic_scale > 1950.0:
-            log.info(
+            logger.info(
                 "Displacement in X too large: {0:.1f}".format(
                     delta_x / Settings.mosaic_scale
                 )
             )
             self.offset_mode = "default"
         if delta_y / Settings.mosaic_scale > 1950.0:
-            log.info(
+            logger.info(
                 "Displacement in Y too large: {0:.1f}".format(
                     delta_y / Settings.mosaic_scale
                 )
@@ -282,7 +280,7 @@ class Section:
                     im_ref = im_i
                     sign = 1
 
-                log.debug(
+                logger.debug(
                     "Initial offsets i: %d j: %d dx: %d dy: %d",
                     ref_img,
                     obj_img,
@@ -307,7 +305,7 @@ class Section:
 
                 offsets.append([i, j, res, sign])
 
-                log.debug(
+                logger.debug(
                     "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
                     self._section.name,
                     i,
@@ -325,7 +323,7 @@ class Section:
 
                 offsets.append([i, j, [dx, dy, 0.0, 0.0], sign])
 
-                log.debug(
+                logger.debug(
                     "Section %s offsets i: %d j: %d dx: %d dy: %d mi: %f avg_f: %f sign: %d",
                     self._section.name,
                     i,
@@ -365,7 +363,7 @@ class Section:
             ]
         )
 
-        log.debug("Scale %f %f", x_scale, y_scale)
+        logger.debug("Scale %f %f", x_scale, y_scale)
 
         self._x_scale, self._y_scale = x_scale, y_scale
         return (x_scale, y_scale)
@@ -443,13 +441,13 @@ class Section:
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
-        log.debug(
+        logger.debug(
             "Default displacement X:  dx:%f , dy:%f, std:%f",
             default_x[0],
             default_x[1],
             dev_x,
         )
-        log.debug(
+        logger.debug(
             "Default displacement Y:  dx:%f , dy:%f, std:%f",
             default_y[0],
             default_y[1],
@@ -606,7 +604,7 @@ class Section:
     def compute_abspos(self):  # noqa: C901
         """Compute absolute positions of images in the field of view.
         """
-        log.info("Processing section %s", self._section.name)
+        logger.info("Processing section %s", self._section.name)
 
         img_cube = self.get_img_section(0, 1)
         img_cube_stack = da.stack(img_cube)
@@ -633,7 +631,7 @@ class Section:
                 )
                 abs_err.append([15.0, 15.0])
 
-            log.info("Displacements too large, resorting to default grid")
+            logger.info("Displacements too large, resorting to default grid")
 
             abs_pos = np.array(abs_pos)
             abs_err = np.array(abs_err)
@@ -678,7 +676,7 @@ class Section:
 
         error_long_threshold = 3.0 * np.max([elongx, elongy]).clip(2, 30)
         error_short_threshold = 3.0 * np.max([eshortx, eshorty]).clip(2, 30)
-        log.debug(
+        logger.debug(
             "Scaling error threshold: l:{0:3f} s:{1:.3f}".format(
                 error_long_threshold, error_short_threshold
             )
@@ -829,7 +827,7 @@ class Section:
 
         ds = xr.Dataset({self._section.name: raw})
         ds.to_zarr(output / "mos.zarr", mode="a")
-        log.info("Mosaic saved %s", output / "mos.zarr")
+        logger.info("Mosaic saved %s", output / "mos.zarr")
 
 
 class STPTMosaic:
@@ -850,6 +848,7 @@ class STPTMosaic:
         self.stage_size = [0, 0]
 
     def initialize_storage(self, output: Path):
+        logger.info('Preparing mosaic output')
         ds = xr.Dataset()
         ds.to_zarr(output / "mos.zarr", mode="w")
 
@@ -867,12 +866,12 @@ class STPTMosaic:
         output
             Location of output directory
         """
-        log.info("Downsampling mosaics")
+        logger.info("Downsampling mosaics")
         store_name = output / "mos.zarr"
         store = zarr.DirectoryStore(store_name)
         up = ""
         for factor in Settings.scales:
-            log.debug("Downsampling factor %d", factor)
+            logger.debug("Downsampling factor %d", factor)
             ds = xr.open_zarr(f"{store_name}", group=up)
             nds = xr.Dataset()
             down = f"l.{factor}"
@@ -881,11 +880,11 @@ class STPTMosaic:
             slices = list(ds)
             for s in slices:
                 nds = xr.Dataset()
-                log.debug("Downsampling mos%d [%s]", factor, s)
+                logger.debug("Downsampling mos%d [%s]", factor, s)
                 narr = ops.downsample(ds[s])
                 nds[s] = narr
                 nds.to_zarr(store, mode="a", group=down)
-            log.info("Downsampled mosaic saved %s:%s", store_name, down)
+            logger.info("Downsampled mosaic saved %s:%s", store_name, down)
             up = down
         arr = zarr.open(f'{store_name}', mode='r+')
         arr.attrs['multiscale'] = {'datasets': [{'path': '', 'level': 1},
@@ -921,4 +920,4 @@ class STPTMosaic:
                         res = arr2tiff(output, im, scl)
                         files.append(res)
                 for tfile in dask.compute(files)[0]:
-                    log.info("Written %s", tfile)
+                    logger.info("Written %s", tfile)
