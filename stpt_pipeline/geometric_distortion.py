@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Dict, List
 
 import dask.array as da
-import scipy.ndimage as ndimage
+import numpy as np
 import xarray as xr
 from dask import delayed
 from distributed import Client, as_completed
+from skimage.transform import warp
 
 import zarr
 from owl_dev.logging import logger
@@ -54,6 +55,25 @@ def read_calib(cal_file: Path) -> xr.DataArray:
     return da.from_array(cal.values)
 
 
+@delayed(pure=True)
+def get_matrix(shape, cof_dist):
+    coords0, coords1 = np.mgrid[: shape[0], : shape[1]].astype("float")
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            res = get_coords(
+                (i, j),
+                cof_dist["cof_x"],
+                cof_dist["cof_y"],
+                cof_dist["tan"],
+                Settings.normal_x,
+                Settings.normal_y,
+            )
+            coords0[i, j] = res[0]
+            coords1[i, j] = res[1]
+    coords = np.array([coords0, coords1])
+    return coords
+
+
 def apply_geometric_transform(
     img: da.Array, dark: da.Array, flat: da.Array, cof_dist: Dict[str, List[float]]
 ) -> da.Array:
@@ -75,23 +95,9 @@ def apply_geometric_transform(
     norm = da.flipud((img - dark) / da.clip(flat, 1e-6, 1e6))
     masked = delayed(mask_image)(norm)
     masked = da.from_delayed(masked, shape=norm.shape, dtype="float32")
-    new = delayed(ndimage.geometric_transform)(
-        masked,
-        get_coords,
-        output_shape=norm.shape,
-        extra_arguments=(
-            cof_dist["cof_x"],
-            cof_dist["cof_y"],
-            cof_dist["tan"],
-            Settings.normal_x,
-            Settings.normal_y,
-        ),
-        mode="constant",
-        cval=0.0,
-        order=1,
-        prefilter=False,
-    )
-    res = da.from_delayed(new, shape=norm.shape, dtype="float32")
+    matrix = get_matrix(masked.shape, cof_dist)
+    new = delayed(warp)(masked, matrix)
+    res = da.from_delayed(new, shape=img.shape, dtype="float32")
     return res
 
 
@@ -162,6 +168,7 @@ def distort(
         number of sections to run in parallel
     """
     client = Client.current()
+    logger.info("Preparing distorted dataset")
     ds = xr.Dataset()
     ds.to_zarr(output, mode="w")
 
