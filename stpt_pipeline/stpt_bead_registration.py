@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from settings import Settings
-from bead_model import neg_log_like_conf
+from .settings import Settings
+from .bead_model import neg_log_like_conf
 
 from scipy.ndimage import label, distance_transform_edt, zoom
 from scipy.optimize import minimize
