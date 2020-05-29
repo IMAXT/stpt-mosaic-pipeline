@@ -63,3 +63,18 @@ class Settings:
 
     flat_file = "/data/meds1_a/eglez/imaxt/flat_dev.nc"
     dark_file = "/data/meds1_a/eglez/imaxt/dark_dev.nc"
+
+    """Settings for bead detection
+    """
+    """ zoom level to be used for 1st pass detection
+    """
+    zoom_level = 8
+
+    """ Min/Max allowed bead size
+    """
+    feature_size = [50., 500.]
+
+    """ Detection threshold for beads and biological sample
+    """
+    sample_detection_threshold = 2.
+    bead_detection_threshold = 5.

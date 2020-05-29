@@ -8,6 +8,7 @@ from owl_dev.logging import logger
 from .geometric_distortion import distort
 from .preprocess import preprocess
 from .settings import Settings
+from .stpt_bead_registration import find_beads
 from .stpt_mosaic import STPTMosaic
 
 
