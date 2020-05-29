@@ -707,7 +707,8 @@ class Section:
         return abs_pos, abs_err
 
     def _create_temporary_mosaic(self, conf, abs_pos, abs_err, output):
-        logger.info("Preparing temporary mosaic")
+        logger.info("Creating temporary mosaic")
+        client = Client.current()
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         for sl in range(self.slices):
@@ -745,7 +746,8 @@ class Section:
                     for name, ch in offset.groups()
                 ]
             )
-            raw = (raw + 10) * 1_000
+
+            raw = (raw - Settings.bzero) / Settings.bscale
             overlap = (
                 da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
                 * 100
@@ -895,6 +897,8 @@ class STPTMosaic:
             ],
             "metadata": {"method": "cv2.pyrDown"},
         }
+        arr.attrs["bscale"] = Settings.bscale
+        arr.attrs["bzero"] = Settings.bzero
 
     def to_tiff(self, output: Path, scales: List[int] = None):
         """Export mosaic to TIFF format.

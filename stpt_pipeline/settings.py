@@ -42,6 +42,9 @@ class Settings:
     """distortion coefficients (filled in from the configuration at runtime)
     """
 
+    bscale = 0.001
+    bzero = -10
+
     scales = [2, 4, 8, 16, 32]
     """default downsample scales"""
 
