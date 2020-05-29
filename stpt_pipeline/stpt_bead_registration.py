@@ -3,11 +3,11 @@ import xarray as xr
 import pickle as pk
 
 from settings import Settings
-from bead_model import bead_profile_supergaussian as bead_profile
 from bead_model import neg_log_like_conf
 
 from scipy.ndimage import gaussian_filter, label, distance_transform_edt, zoom
 from scipy.optimize import minimize
+from scipy.stats import median_absolute_deviation as mad
 from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
 
@@ -17,11 +17,6 @@ from pathlib import Path
 
 import logging
 log = logging.getLogger("owl.daemon.pipeline")
-
-
-def mad(x):
-
-    return np.median(np.abs(x - np.median(x)))
 
 
 @delayed
@@ -64,8 +59,8 @@ def det_features(im, pedestal, im_std):
     # object
 
     labels, n_objs = label(
-        clean_im
-        > Settings.sample_detection_threshold * im_std
+        clean_im >
+        Settings.sample_detection_threshold * im_std
     )
     sample_size = 0
     sample_label = 0
@@ -78,8 +73,8 @@ def det_features(im, pedestal, im_std):
     # now we mask the sample
     mask = 1.0 - (labels == sample_label)
     labels, n_objs = label(
-        clean_im * mask
-        > Settings.bead_detection_threshold * im_std
+        clean_im * mask >
+        Settings.bead_detection_threshold * im_std
     )
 
     # Watershed segmentation for beads that are touching
@@ -156,7 +151,7 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
     ]
 
     n_conv = 0.0
-    for i in range(100):
+    for _i in range(100):
         #
         # I cut a small image around the candidate pixel,
         # calculate the centre of mass coordinates
@@ -214,8 +209,8 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
 
         # total radius when profile drops to 0.1*std
 
-        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std /
-                                           res['x'][2]))**(1. / (2 * res['x'][4]))
+        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std
+                                           / res['x'][2]))**(1. / (2 * res['x'][4]))
         peak = res['x'][2]
         width = res['x'][3]
         cen_x = res['x'][0] + ll_corner[0]
@@ -298,8 +293,8 @@ def fit_bead(
         'bead_id': bead_label,
         'x': res['x'][0] + corner[0],
         'y': res['x'][1] + corner[1],
-        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2] /
-                                            res['x'][2]))**(1. / (2 * res['x'][4])),
+        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2]
+                                            / res['x'][2]))**(1. / (2 * res['x'][4])),
         'fit': res['x'],
         'conv': res['success'],
         'err': err_t,
@@ -330,8 +325,8 @@ def find_beads(mos_zarr: Path):
         for this_optical in optical_slices:
 
             log.info(
-                'Analysing beads in' + this_slice +
-                ' Z{0:03d}'.format(this_optical)
+                'Analysing beads in' + this_slice
+                + ' Z{0:03d}'.format(this_optical)
             )
 
             full_im = mos_full[this_slice].sel(
@@ -400,7 +395,7 @@ def find_beads(mos_zarr: Path):
             temp = []
             log.info('  Fitting all beads...')
             for i in range(len(beads_1st_iter)):
-                if beads_1st_iter[i][-1] == False:
+                if beads_1st_iter[i][-1] is False:
                     continue
                 if beads_1st_iter[i][2] * Settings.zoom_level > Settings.feature_size[1]:
                     continue
@@ -451,7 +446,7 @@ def find_beads(mos_zarr: Path):
             done_x = [0]
             done_y = [0]
             for this_bead in all_beads:
-                if this_bead['conv'] == False:
+                if this_bead['conv'] is False:
                     continue
                 if this_bead['x'] < -50:
                     continue
@@ -464,8 +459,8 @@ def find_beads(mos_zarr: Path):
                 if this_bead['rad'] > Settings.feature_size[1]:
                     continue
 
-                r = np.sqrt((this_bead['x'] - np.array(done_x))
-                            ** 2 + (this_bead['y'] - np.array(done_y))**2)
+                r = np.sqrt((this_bead['x'] - np.array(done_x)) **
+                            2 + (this_bead['y'] - np.array(done_y))**2)
                 if r.min() < 0.5 * Settings.feature_size[0]:
                     continue
                 else:
