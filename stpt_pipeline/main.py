@@ -6,6 +6,7 @@ from .geometric_distortion import distort
 from .preprocess import preprocess
 from .settings import Settings
 from .stpt_mosaic import STPTMosaic
+from .stpt_bead_registration import find_beads
 
 log = logging.getLogger("owl.daemon.pipeline")
 
@@ -65,3 +66,7 @@ def main(  # noqa: C901
 
     if "tiff" in recipes:
         mos.to_tiff(basedir)
+
+    mos_dis = basedir / "mos.zarr"
+    if "beadreg" in recipes:
+        find_beads(mos_dis)
