@@ -2,6 +2,7 @@ import traceback
 from pathlib import Path
 from typing import List, Tuple
 
+import cv2
 import dask
 import dask.array as da
 import numpy as np
@@ -895,7 +896,7 @@ class STPTMosaic:
                 {"path": "l.16", "level": 16},
                 {"path": "l.32", "level": 32},
             ],
-            "metadata": {"method": "cv2.pyrDown"},
+            "metadata": {"method": "cv2.pyrDown", "version": cv2.__version__},
         }
         arr.attrs["bscale"] = Settings.bscale
         arr.attrs["bzero"] = Settings.bzero
