@@ -79,5 +79,5 @@ def neg_log_like_conf(theta, xx, yy, zz, conf, do_full, do_print):
         ll -= np.log(factorial(1. + zz))
     #
     if do_print:
-        print(print_theta(theta), ll.sum())
-    return -1.0 * ll.sum()
+        print(print_theta(theta), np.nansum(ll))
+    return -1.0 * np.nansum(ll)

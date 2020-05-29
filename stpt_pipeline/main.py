@@ -8,8 +8,14 @@ from owl_dev.logging import logger
 from .geometric_distortion import distort
 from .preprocess import preprocess
 from .settings import Settings
-from .stpt_bead_registration import find_beads
+from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
+
+<<<<<<< HEAD
+=======
+
+log = logging.getLogger("owl.daemon.pipeline")
+>>>>>>> 031e514... Add slice registration
 
 
 def main(  # noqa: C901
