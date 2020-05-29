@@ -669,7 +669,7 @@ def register_slices(mos_zarr: Path):
         id_str = np.array(id_str)
 
         for j in range(len(x_r)):
-            bb.add_bead(x_r[j] + dx_t, y_r[j] + dy_t, x_r[j], y_r[j], id_r[j])
+            bb.add_bead(x_r[j] + dx_t, y_r[j] + dy_t, x_r[j], y_r[j], ind_r[j])
 
         # at each slice we check matching beads and update avg coords
         bb.update_coords()
