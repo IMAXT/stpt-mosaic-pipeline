@@ -202,7 +202,7 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
                  (im_t * mask_t).max(), 0.25 * np.sum(feature_size), 1.0]
 
         res = fit_bead(
-            im_t, 0.0, 1.0, label_t, theta, 0.0, im_std, bead_num, [0, 0],
+            im_t, label_t, theta, 0.0, im_std, bead_num, [0, 0],
             simple_result=True
         )
 
@@ -212,6 +212,7 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
                                            res['x'][2]))**(1. / (2 * res['x'][4]))
         peak = res['x'][2]
         width = res['x'][3]
+        exp = res['x'][4]
         cen_x = res['x'][0] + ll_corner[0]
         cen_y = res['x'][1] + ll_corner[1]
         conv = res['success']
@@ -220,14 +221,104 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
         cen_y = 0.0
         rad = -99
         width = -99
+        exp = 1.0
         peak = -99
         conv = False
 
-    return cen_x, cen_y, rad, peak, width, bead_num, conv
+    return cen_x, cen_y, rad, peak, width, exp, bead_num, conv
+
+
+def get_cutout(im, ll_corner, width, full_shape):
+
+    ur_corner = [int(np.min([full_shape[0], ll_corner[0] + width])),
+                 int(np.min([full_shape[1], ll_corner[1] + width]))]
+
+    # these are the full images that come as a zarr pointer
+    im_t = im[ll_corner[0]:ur_corner[0],
+              ll_corner[1]: ur_corner[1]]
+
+    return im_t
+
+
+def _fit_bead_2ndpass(full_im, full_conf, full_err, full_labels,
+                      estimated_pars, pedestal, im_std, bead_num, full_shape):
+    """
+        Does the final fit over the full res image
+    """
+
+    cen_x = estimated_pars[0] * Settings.zoom_level
+    cen_y = estimated_pars[1] * Settings.zoom_level
+
+    window_size = 2.1 * estimated_pars[2] * Settings.zoom_level
+
+    ll_corner = [
+        int(np.max(
+            [0, estimated_pars[0] * Settings.zoom_level - 0.5 * window_size]
+        )),
+        int(np.max(
+            [0, estimated_pars[1] * Settings.zoom_level - 0.5 * window_size]
+        ))
+    ]
+
+    im_t = get_cutout(
+        full_im,
+        ll_corner,
+        window_size,
+        full_shape
+    )
+    conf_t = get_cutout(
+        full_conf,
+        ll_corner,
+        window_size,
+        full_shape
+    )
+    err_t = get_cutout(
+        full_err,
+        ll_corner,
+        window_size,
+        full_shape
+    )
+
+    label_t = get_cutout(
+        full_labels,
+        ll_corner,
+        window_size,
+        full_shape
+    ).astype(int)
+
+    log.debug(
+        '   Fitting bead {0:d}, cutout size: {1:d}x{2:d}'.format(
+            bead_num, im_t.shape[0], im_t.shape[1]
+        )
+    )
+
+    # brighter pixels dominate the fit, therefore contribute
+    # more to the error
+    temp = np.sqrt(err_t / conf_t.clip(1, 1e6))
+    err_bead = np.sum(temp * (im_t - pedestal)**2) / \
+        np.sum((im_t - pedestal) ** 2)
+
+    theta = [
+        cen_x,
+        cen_y,
+        estimated_pars[3],
+        Settings.zoom_level * estimated_pars[4],
+        estimated_pars[5]
+    ]
+
+    res = fit_bead(
+        im_t, label_t,
+        theta, pedestal, im_std, bead_num,
+        ll_corner
+    )
+    # appending error
+    res['err'] = err_bead
+
+    return res
 
 
 def fit_bead(
-    im, err, conf, label, theta, pedestal,
+    im, label, theta, pedestal,
     im_std, bead_label, corner, simple_result=False
 ):
     """
@@ -259,17 +350,9 @@ def fit_bead(
         from optimize, the fit parameters and the estimated centering error
     """
 
-    cen_x, cen_y, rad, peak, width = theta
+    cen_x, cen_y, peak, width, exp = theta
 
     im_t = im - pedestal
-
-    # brighter pixels dominate the fit, therefore contribute
-    # more to the error
-    if simple_result:
-        err_t = 1.0
-    else:
-        temp = np.sqrt(err / conf.clip(1, 1e6))
-        err_t = np.sum(temp * im_t**2) / np.sum(im_t**2)
 
     mask_t = (label == 0) + (label == bead_label)
 
@@ -282,7 +365,7 @@ def fit_bead(
     # accomodates for the flat core of the beads
     res = minimize(
         neg_log_like_conf,
-        [cen_x - corner[0], cen_y - corner[1], peak, width, 1.0],
+        [cen_x - corner[0], cen_y - corner[1], peak, width, exp],
         args=(x_im_t, y_im_t, im_t, mask_t, False, False), method='Powell'
     )
     # total radius when profile drops to 0.01*peak
@@ -292,11 +375,10 @@ def fit_bead(
         'bead_id': bead_label,
         'x': res['x'][0] + corner[0],
         'y': res['x'][1] + corner[1],
-        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2] /
-                                            res['x'][2]))**(1. / (2 * res['x'][4])),
+        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2]
+                                            / res['x'][2]))**(1. / (2 * res['x'][4])),
         'fit': res['x'],
         'conv': res['success'],
-        'err': err_t,
         'corner': corner
     }
     return fit_res
@@ -372,9 +454,9 @@ def find_beads(mos_zarr: Path):
         Attaches all the bead info as attrs to the zarr
     """
 
-    mos_full = xr.open_zarr(mos_zarr)
+    mos_full = xr.open_zarr(f"{mos_zarr}", group='')
     mos_zoom = xr.open_zarr(
-        mos_zarr, group='l.{0:d}'.format(Settings.zoom_level)
+        f"{mos_zarr}", group='l.{0:d}'.format(Settings.zoom_level)
     )
 
     slices = list(mos_full)
@@ -386,24 +468,8 @@ def find_beads(mos_zarr: Path):
         for this_optical in optical_slices:
 
             log.info(
-                'Analysing beads in' + this_slice +
-                ' Z{0:03d}'.format(this_optical)
-            )
-
-            full_im = mos_full[this_slice].sel(
-                z=this_optical,
-                channel=Settings.channel_to_use,
-                type='mosaic'
-            )
-            full_conf = mos_full[this_slice].sel(
-                z=this_optical,
-                channel=Settings.channel_to_use,
-                type='conf'
-            )
-            full_err = mos_full[this_slice].sel(
-                z=this_optical,
-                channel=Settings.channel_to_use,
-                type='err'
+                'Analysing beads in ' + this_slice
+                + ' Z{0:03d}'.format(this_optical)
             )
 
             im = mos_zoom[this_slice].sel(
@@ -448,10 +514,34 @@ def find_beads(mos_zarr: Path):
 
             log.info('  Found {0:d} possible beads'.format(n))
 
-            # resizing labels to full image size
-            full_labels = da.from_array(
-                zoom(labels, Settings.zoom_level, order=0).astype(int)
+            # resampling to full arr
+            full_labels = delayed(zoom)(
+                labels, Settings.zoom_level, order=0
             )
+
+            full_shape = mos_full[this_slice].sel(
+                z=this_optical,
+                channel=Settings.channel_to_use,
+                type='mosaic'
+            ).shape
+
+            full_im = delayed(mos_full[this_slice].sel(
+                z=this_optical,
+                channel=Settings.channel_to_use,
+                type='mosaic'
+            ).values)
+
+            full_conf = delayed(mos_full[this_slice].sel(
+                z=this_optical,
+                channel=Settings.channel_to_use,
+                type='conf'
+            ).values)
+
+            full_err = delayed(mos_full[this_slice].sel(
+                z=this_optical,
+                channel=Settings.channel_to_use,
+                type='err'
+            ).values)
 
             temp = []
             log.info('  Fitting all beads...')
@@ -461,42 +551,11 @@ def find_beads(mos_zarr: Path):
                 if beads_1st_iter[i][2] * Settings.zoom_level > Settings.feature_size[1]:
                     continue
 
-                feature_size = Settings.zoom_level * 2.1 * beads_1st_iter[i][2]
-                cen_x = beads_1st_iter[i][0] * Settings.zoom_level
-                cen_y = beads_1st_iter[i][1] * Settings.zoom_level
-
-                ll_corner = [int(np.max([0, cen_x - 0.5 * feature_size])),
-                             int(np.max([0, cen_y - 0.5 * feature_size]))]
-                ur_corner = [int(np.min([full_im.shape[0], cen_x + 0.5 * feature_size])),
-                             int(np.min([full_im.shape[1], cen_y + 0.5 * feature_size]))]
-
-                im_t = full_im[ll_corner[0]:ur_corner[0],
-                               ll_corner[1]:ur_corner[1]].values
-                err_t = full_err[ll_corner[0]:ur_corner[0],
-                                 ll_corner[1]: ur_corner[1]].values
-                conf_t = full_conf[ll_corner[0]:ur_corner[0],
-                                   ll_corner[1]: ur_corner[1]].values
-
-                mask_t = np.array(
-                    full_labels[ll_corner[0]:ur_corner[0],
-                                ll_corner[1]:ur_corner[1]]
-                )
-
-                theta = [
-                    cen_x,
-                    cen_y,
-                    Settings.zoom_level * beads_1st_iter[i][2],
-                    beads_1st_iter[i][3],
-                    Settings.zoom_level * beads_1st_iter[i][4]
-                ]
-
-                temp.append(
-                    delayed(fit_bead)(
-                        im_t, err_t, conf_t, mask_t,
-                        theta, pedestal, im_std, good_objects[i],
-                        ll_corner
-                    )
-                )
+                temp.append(delayed(_fit_bead_2ndpass)(
+                    full_im, full_conf, full_err, full_labels,
+                    beads_1st_iter[i], pedestal,
+                    im_std, good_objects[i], full_shape
+                ))
             all_beads = compute(temp)[0]
 
             # now we store all good beads in a dictionary, removing
@@ -513,9 +572,9 @@ def find_beads(mos_zarr: Path):
                     continue
                 if this_bead['y'] < -50:
                     continue
-                if this_bead['x'] > full_im.shape[0] + 50:
+                if this_bead['x'] > full_shape[0] + 50:
                     continue
-                if this_bead['y'] > full_im.shape[1] + 50:
+                if this_bead['y'] > full_shape[1] + 50:
                     continue
                 if this_bead['rad'] > Settings.feature_size[1]:
                     continue
@@ -607,7 +666,7 @@ def register_slices(mos_zarr: Path):
         slices are matched to the first one
     """
 
-    mos_full = xr.open_zarr(mos_zarr)
+    mos_full = xr.open_zarr(f"{mos_zarr}")
     _slices = list(mos_full)
 
     # putting all slices on a single list
