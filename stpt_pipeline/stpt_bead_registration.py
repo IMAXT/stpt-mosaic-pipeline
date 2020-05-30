@@ -240,6 +240,7 @@ def get_cutout(im, ll_corner, width, full_shape):
     return im_t
 
 
+@delayed
 def _fit_bead_2ndpass(full_im, full_conf, full_err, full_labels,
                       estimated_pars, pedestal, im_std, bead_num, full_shape):
     """
@@ -266,6 +267,21 @@ def _fit_bead_2ndpass(full_im, full_conf, full_err, full_labels,
         window_size,
         full_shape
     )
+
+    # check for image size
+    if (im_t.shape[0] < 5) | (im_t.shape[1] < 5):
+        empty_res = {
+            'bead_id': bead_num,
+            'x': 0.0,
+            'y': 0.0,
+            'rad': Settings.feature_size[1] * 10.,
+            'fit': [0.0, 0.0, 0.0, 0.0, 0.0],
+            'conv': False,
+            'corner': ll_corner,
+            'err': 500
+        }
+        return empty_res
+
     conf_t = get_cutout(
         full_conf,
         ll_corner,
@@ -285,12 +301,6 @@ def _fit_bead_2ndpass(full_im, full_conf, full_err, full_labels,
         window_size,
         full_shape
     ).astype(int)
-
-    log.debug(
-        '   Fitting bead {0:d}, cutout size: {1:d}x{2:d}'.format(
-            bead_num, im_t.shape[0], im_t.shape[1]
-        )
-    )
 
     # brighter pixels dominate the fit, therefore contribute
     # more to the error
@@ -366,7 +376,10 @@ def fit_bead(
     res = minimize(
         neg_log_like_conf,
         [cen_x - corner[0], cen_y - corner[1], peak, width, exp],
-        args=(x_im_t, y_im_t, im_t, mask_t, False, False), method='Powell'
+        args=(
+            x_im_t.flatten(), y_im_t.flatten(),
+            im_t.flatten(), mask_t.flatten(), False, False
+        ), method='Powell'
     )
     # total radius when profile drops to 0.01*peak
     if simple_result:
@@ -551,7 +564,7 @@ def find_beads(mos_zarr: Path):
                 if beads_1st_iter[i][2] * Settings.zoom_level > Settings.feature_size[1]:
                     continue
 
-                temp.append(delayed(_fit_bead_2ndpass)(
+                temp.append(_fit_bead_2ndpass(
                     full_im, full_conf, full_err, full_labels,
                     beads_1st_iter[i], pedestal,
                     im_std, good_objects[i], full_shape
@@ -611,13 +624,13 @@ def find_beads(mos_zarr: Path):
             for this_key in bead_cat.keys():
                 mos_full[this_slice].sel(z=this_optical).attrs[
                     bead_par_to_attr_name[this_key]
-                ] = np.array(bead_cat[this_key])
+                ] = bead_cat[this_key]
 
 
 def _get_beads(slice_obj):
 
     xc = slice_obj['bead_xc'][:]
-    yc = slice_obj['bead_xc'][:]
+    yc = slice_obj['bead_yc'][:]
     err = slice_obj['bead_centre_err'][:]
     rad = slice_obj['bead_rad'][:]
     ind = slice_obj['bead_id'][:]

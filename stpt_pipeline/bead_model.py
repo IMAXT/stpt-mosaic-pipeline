@@ -32,14 +32,6 @@ def bead_profile_supergaussian(x, y, x0, y0, p, s, c):
     return p * np.exp(-((r / s)**2)**c)
 
 
-def minfunc_2d(theta, xx, yy, zz):
-    x0, y0, rt, p, a = theta
-    res = zz - bead_profile_2d(xx, yy, x0, y0, rt, p, a, c)
-    #
-    return np.sum(res**2) / float(zz.size)
-#
-
-
 def neg_log_like(theta, xx, yy, zz, do_full, do_print):
     #
     # x0,y0,rt,p,a=theta
