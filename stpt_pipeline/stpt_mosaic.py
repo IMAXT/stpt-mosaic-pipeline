@@ -732,6 +732,7 @@ class Section:
                         logger.error(fut.exception())
                         tb = fut.traceback()
                         logger.error(traceback.format_tb(tb))
+                logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
         return z
 
     def _compute_final_mosaic(self, z):
