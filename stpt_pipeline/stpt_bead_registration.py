@@ -59,8 +59,8 @@ def det_features(im, pedestal, im_std):
     # object
 
     labels, n_objs = label(
-        clean_im
-        > Settings.sample_detection_threshold * im_std
+        clean_im >
+        Settings.sample_detection_threshold * im_std
     )
     sample_size = 0
     sample_label = 0
@@ -73,8 +73,8 @@ def det_features(im, pedestal, im_std):
     # now we mask the sample
     mask = 1.0 - (labels == sample_label)
     labels, n_objs = label(
-        clean_im * mask
-        > Settings.bead_detection_threshold * im_std
+        clean_im * mask >
+        Settings.bead_detection_threshold * im_std
     )
 
     # Watershed segmentation for beads that are touching
@@ -209,8 +209,8 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
 
         # total radius when profile drops to 0.1*std
 
-        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std /
-                                           res['x'][2]))**(1. / (2 * res['x'][4]))
+        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std
+                                           / res['x'][2]))**(1. / (2 * res['x'][4]))
         peak = res['x'][2]
         width = res['x'][3]
         exp = res['x'][4]
@@ -389,8 +389,8 @@ def fit_bead(
         'bead_id': float(bead_label),
         'x': res['x'][0] + corner[0],
         'y': res['x'][1] + corner[1],
-        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2]
-                                            / res['x'][2]))**(1. / (2 * res['x'][4])),
+        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2] /
+                                            res['x'][2]))**(1. / (2 * res['x'][4])),
         'fit': res['x'].tolist(),
         'conv': res['success'],
         'corner': corner
@@ -466,14 +466,14 @@ def _check_bead(this_bead, done_x, done_y):
         return False
 
     if (
-        (this_bead['x'] < -50) |
-        (this_bead['y'] < -50)
+        (this_bead['x'] < -50)
+        | (this_bead['y'] < -50)
     ):
         return False
 
     if (
-        (this_bead['x'] > full_shape[0] + 50)
-        | (this_bead['y'] > full_shape[1] + 50)
+        (this_bead['x'] > full_shape[0] + 50) |
+        (this_bead['y'] > full_shape[1] + 50)
     ):
         return False
 
@@ -481,8 +481,8 @@ def _check_bead(this_bead, done_x, done_y):
         return False
 
     r = np.sqrt(
-        (this_bead['x'] - np.array(done_x)) ** 2
-        + (this_bead['y'] - np.array(done_y)) ** 2
+        (this_bead['x'] - np.array(done_x)) ** 2 +
+        (this_bead['y'] - np.array(done_y)) ** 2
     )
     if r.min() < 0.5 * Settings.feature_size[0]:
         return False
@@ -495,8 +495,23 @@ def find_beads(mos_zarr: Path):
 
         Attaches all the bead info as attrs to the zarr
     """
+
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
+
+    # conversion from dict headers to more informative
+    # metadata names
+    bead_par_to_attr_name = {
+        'bead_id': 'bead_id',
+        'conv': 'bead_conv',
+        'corner': 'bead_cutout_corner',
+        'err': 'bead_centre_err',
+        'fit': 'bead_fit_pars',
+        'rad': 'bead_rad',
+        'x': 'bead_x',
+        'y': 'bead_y',
+        'z': 'bead_z'
+    }
 
     mos_full = xr.open_zarr(f"{mos_zarr}", group='')
     mos_zoom = xr.open_zarr(
@@ -515,8 +530,8 @@ def find_beads(mos_zarr: Path):
         for this_optical in optical_slices:
 
             log.info(
-                'Analysing beads in ' + this_slice
-                + ' Z{0:03d}'.format(this_optical)
+                'Analysing beads in ' + this_slice +
+                ' Z{0:03d}'.format(this_optical)
             )
 
             im = mos_zoom[this_slice].sel(
@@ -634,20 +649,6 @@ def find_beads(mos_zarr: Path):
 
                 first_bead = False
 
-            # conversion from dict headers to more informative
-            # metadata names
-            bead_par_to_attr_name = {
-                'bead_id': 'bead_id',
-                'conv': 'bead_conv',
-                'corner': 'bead_cutout_corner',
-                'err': 'bead_centre_err',
-                'fit': 'bead_fit_pars',
-                'rad': 'bead_rad',
-                'x': 'bead_x',
-                'y': 'bead_y',
-                'z': 'bead_z'
-            }
-
         # Store results as attrs in the full res slice
         for this_key in bead_cat.keys():
             zarr_store[this_slice].attrs[
@@ -703,8 +704,8 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2)
 
         # only 3sigma matches
-        ii = np.where(r_sl - np.median(r_sl) < 3.
-                      * 1.48 * mad(r_sl, axis=None))[0]
+        ii = np.where(r_sl - np.median(r_sl) < 3. *
+                      1.48 * mad(r_sl, axis=None))[0]
         dx = np.median((xl[i_ls] - xs[i_sl])[ii])
         dy = np.median((yl[i_ls] - ys[i_sl])[ii])
 
@@ -762,16 +763,16 @@ def register_slices(mos_zarr: Path):
         dx.append(dxt)
         dy.append(dyt)
 
-        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)**2 +
-                     (x_r[i_rt] - x_t[i_tr] - dxt)**2)
+        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)**2
+                     + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
         dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr])**2 + (x_r[i_rt] - x_t[i_tr])**2)
 
         log.info(
-            physical_slices[i - 1] + '_Z{0:03d}:'.format(optical_slices[i - 1])
-            + physical_slices[i] + '_Z{0:03d}:'.format(optical_slices[i])
-            + ' {0:d} '.format(len(i_tr))
-            + '{0:.1f} {1:.1f} '.format(dxt, dyt)
-            + '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
+            physical_slices[i - 1] + '_Z{0:03d}:'.format(optical_slices[i - 1]) +
+            physical_slices[i] + '_Z{0:03d}:'.format(optical_slices[i]) +
+            ' {0:d} '.format(len(i_tr)) +
+            '{0:.1f} {1:.1f} '.format(dxt, dyt) +
+            '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
         )
 
     # now that we know the slice to slice offset, we construct the catalogue
@@ -871,15 +872,15 @@ def register_slices(mos_zarr: Path):
         dy2.append(dyt)
         dd2.append(edt)
 
-        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt) **
-                     2 + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
-        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) **
-                      2 + (x_r[i_rt] - x_t[i_tr])**2)
+        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)
+                     ** 2 + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
+        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr])
+                      ** 2 + (x_r[i_rt] - x_t[i_tr])**2)
         log.info(
-            ref_slice + ':' + this_slice
-            + ' {0:d} '.format(len(i_tr))
-            + '{0:.1f} {1:.1f} '.format(dxt, dyt)
-            + '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
+            ref_slice + ':' + this_slice +
+            ' {0:d} '.format(len(i_tr)) +
+            '{0:.1f} {1:.1f} '.format(dxt, dyt) +
+            '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
         )
 
     # Now we store all the displacements as attrs
