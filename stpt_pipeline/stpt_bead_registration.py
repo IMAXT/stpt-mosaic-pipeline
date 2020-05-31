@@ -520,6 +520,12 @@ def find_beads(mos_zarr: Path):
 
     slices = list(mos_full)
 
+    full_shape = mos_full[slices[0]].sel(
+        z=this_optical,
+        channel=Settings.channel_to_use,
+        type='mosaic'
+    ).shape
+
     for this_slice in slices:
 
         optical_slices = list(mos_full[slices[0]].z.values)
@@ -569,23 +575,10 @@ def find_beads(mos_zarr: Path):
                     good_cx[i], good_cy[i], pedestal, im_std, good_objects[i]))
             beads_1st_iter = compute(temp)[0]
 
-            n = 0
-            for t in beads_1st_iter:
-                if t[-1]:
-                    n += 1
-
-            log.info('  Found {0:d} possible beads'.format(n))
-
             # resampling to full arr
             full_labels = delayed(zoom)(
                 labels, Settings.zoom_level, order=0
             )
-
-            full_shape = mos_full[this_slice].sel(
-                z=this_optical,
-                channel=Settings.channel_to_use,
-                type='mosaic'
-            ).shape
 
             full_im = delayed(mos_full[this_slice].sel(
                 z=this_optical,
