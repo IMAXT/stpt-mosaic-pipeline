@@ -460,7 +460,7 @@ class bead_collection():
                 self.dy[i] = np.std(np.array(self.y_list[i]))
 
 
-def _check_bead(this_bead, done_x, done_y):
+def _check_bead(this_bead, done_x, done_y, full_shape):
 
     if this_bead['conv'] is False:
         return False
@@ -632,7 +632,7 @@ def find_beads(mos_zarr: Path):
 
             for this_bead in all_beads:
 
-                if _check_bead(this_bead, done_x, done_y) is False:
+                if _check_bead(this_bead, done_x, done_y, full_shape) is False:
                     continue
 
                 done_x.append(this_bead['x'])
