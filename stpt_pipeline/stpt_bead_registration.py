@@ -460,6 +460,34 @@ class bead_collection():
                 self.dy[i] = np.std(np.array(self.y_list[i]))
 
 
+def _check_bead(this_bead, done_x, done_y):
+
+    if this_bead['conv'] is False:
+        return False
+
+    if (
+        (this_bead['x'] < -50) |
+        (this_bead['y'] < -50)
+    ):
+        return False
+
+    if (
+        (this_bead['x'] > full_shape[0] + 50)
+        | (this_bead['y'] > full_shape[1] + 50)
+    ):
+        return False
+
+    if this_bead['rad'] > Settings.feature_size[1]:
+        return False
+
+    r = np.sqrt(
+        (this_bead['x'] - np.array(done_x)) ** 2
+        + (this_bead['y'] - np.array(done_y)) ** 2
+    )
+    if r.min() < 0.5 * Settings.feature_size[0]:
+        return False
+
+
 def find_beads(mos_zarr: Path):
     """
         Finds all the beads in all the slices (physical and optical) in the
@@ -586,37 +614,22 @@ def find_beads(mos_zarr: Path):
 
             done_x = [0]
             done_y = [0]
+
             for this_bead in all_beads:
-                if this_bead['conv'] is False:
-                    continue
-                if this_bead['x'] < -50:
-                    continue
-                if this_bead['y'] < -50:
-                    continue
-                if this_bead['x'] > full_shape[0] + 50:
-                    continue
-                if this_bead['y'] > full_shape[1] + 50:
-                    continue
-                if this_bead['rad'] > Settings.feature_size[1]:
+
+                if _check_bead(this_bead, done_x, done_y) is False:
                     continue
 
-                r = np.sqrt((this_bead['x'] - np.array(done_x))
-                            ** 2 + (this_bead['y'] - np.array(done_y))**2)
-                if r.min() < 0.5 * Settings.feature_size[0]:
-                    continue
-                else:
-                    done_x.append(this_bead['x'])
-                    done_y.append(this_bead['y'])
-
-                for this_key in this_bead.keys():
-                    if first_bead:
-                        bead_cat[this_key] = [this_bead[this_key]]
-                    else:
-                        bead_cat[this_key].append(this_bead[this_key])
+                done_x.append(this_bead['x'])
+                done_y.append(this_bead['y'])
 
                 if first_bead:
+                    for this_key in this_bead.keys():
+                        bead_cat[this_key] = [this_bead[this_key]]
                     bead_cat['z'] = [float(this_optical)]
                 else:
+                    for this_key in this_bead.keys():
+                        bead_cat[this_key].append(this_bead[this_key])
                     bead_cat['z'].append(float(this_optical))
 
                 first_bead = False
