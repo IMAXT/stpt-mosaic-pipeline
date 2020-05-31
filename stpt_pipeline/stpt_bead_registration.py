@@ -709,7 +709,8 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         if len(xr) > len(xt):
             return dx, dy, ex, i_ls, i_sl
         else:
-            return -dx, -dy, ex, i_sl, i_ls
+            return - dx, -dy, ex, i_sl, i_ls
+
     if len(xr) > len(xt):
         return dx, dy, i_ls, i_sl
     else:
