@@ -59,8 +59,8 @@ def det_features(im, pedestal, im_std):
     # object
 
     labels, n_objs = label(
-        clean_im >
-        Settings.sample_detection_threshold * im_std
+        clean_im
+        > Settings.sample_detection_threshold * im_std
     )
     sample_size = 0
     sample_label = 0
@@ -73,8 +73,8 @@ def det_features(im, pedestal, im_std):
     # now we mask the sample
     mask = 1.0 - (labels == sample_label)
     labels, n_objs = label(
-        clean_im * mask >
-        Settings.bead_detection_threshold * im_std
+        clean_im * mask
+        > Settings.bead_detection_threshold * im_std
     )
 
     # Watershed segmentation for beads that are touching
@@ -209,8 +209,8 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
 
         # total radius when profile drops to 0.1*std
 
-        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std
-                                           / res['x'][2]))**(1. / (2 * res['x'][4]))
+        rad = res['x'][3] * (-1.0 * np.log(0.1 * im_std /
+                                           res['x'][2]))**(1. / (2 * res['x'][4]))
         peak = res['x'][2]
         width = res['x'][3]
         exp = res['x'][4]
@@ -389,8 +389,8 @@ def fit_bead(
         'bead_id': float(bead_label),
         'x': res['x'][0] + corner[0],
         'y': res['x'][1] + corner[1],
-        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2] /
-                                            res['x'][2]))**(1. / (2 * res['x'][4])),
+        'rad': res['x'][3] * (-1.0 * np.log(0.01 * res['x'][2]
+                                            / res['x'][2]))**(1. / (2 * res['x'][4])),
         'fit': res['x'].tolist(),
         'conv': res['success'],
         'corner': corner
@@ -466,14 +466,14 @@ def _check_bead(this_bead, done_x, done_y, full_shape):
         return False
 
     if (
-        (this_bead['x'] < -50)
-        | (this_bead['y'] < -50)
+        (this_bead['x'] < -50) |
+        (this_bead['y'] < -50)
     ):
         return False
 
     if (
-        (this_bead['x'] > full_shape[0] + 50) |
-        (this_bead['y'] > full_shape[1] + 50)
+        (this_bead['x'] > full_shape[0] + 50)
+        | (this_bead['y'] > full_shape[1] + 50)
     ):
         return False
 
@@ -481,8 +481,8 @@ def _check_bead(this_bead, done_x, done_y, full_shape):
         return False
 
     r = np.sqrt(
-        (this_bead['x'] - np.array(done_x)) ** 2 +
-        (this_bead['y'] - np.array(done_y)) ** 2
+        (this_bead['x'] - np.array(done_x)) ** 2
+        + (this_bead['y'] - np.array(done_y)) ** 2
     )
     if r.min() < 0.5 * Settings.feature_size[0]:
         return False
@@ -536,8 +536,8 @@ def find_beads(mos_zarr: Path):
         for this_optical in optical_slices:
 
             log.info(
-                'Analysing beads in ' + this_slice +
-                ' Z{0:03d}'.format(this_optical)
+                'Analysing beads in ' + this_slice
+                + ' Z{0:03d}'.format(this_optical)
             )
 
             im = mos_zoom[this_slice].sel(
@@ -697,8 +697,8 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2)
 
         # only 3sigma matches
-        ii = np.where(r_sl - np.median(r_sl) < 3. *
-                      1.48 * mad(r_sl, axis=None))[0]
+        ii = np.where(r_sl - np.median(r_sl) < 3.
+                      * 1.48 * mad(r_sl, axis=None))[0]
         dx = np.median((xl[i_ls] - xs[i_sl])[ii])
         dy = np.median((yl[i_ls] - ys[i_sl])[ii])
 
@@ -714,6 +714,28 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         return dx, dy, i_ls, i_sl
     else:
         return -dx, -dy, i_sl, i_ls
+
+
+def _get_good_beads(mos_full, phys, opt, good_beads):
+    _ind, _x, _y, _, _e = _get_beads(
+        mos_full[phys].attrs, opt
+    )
+    # we check which of these are repeated beads
+    ind_t = np.array([])
+    x_t = np.array([])
+    y_t = np.array([])
+    e_t = np.array([])
+    _j = 0
+    for this_id in _ind:
+        temp = phys + ':{0:05d}'.format(int(this_id))
+        if temp in good_beads:
+            ind_t = np.append(ind_t, this_id)
+            x_t = np.append(x_t, _x[_j])
+            y_t = np.append(y_t, _y[_j])
+            e_t = np.append(e_t, _e[_j])
+        _j += 1
+
+    return ind_t, x_t, y_t, e_t
 
 
 def register_slices(mos_zarr: Path):
@@ -756,16 +778,16 @@ def register_slices(mos_zarr: Path):
         dx.append(dxt)
         dy.append(dyt)
 
-        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)**2
-                     + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
+        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)**2 +
+                     (x_r[i_rt] - x_t[i_tr] - dxt)**2)
         dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr])**2 + (x_r[i_rt] - x_t[i_tr])**2)
 
         log.info(
-            physical_slices[i - 1] + '_Z{0:03d}:'.format(optical_slices[i - 1]) +
-            physical_slices[i] + '_Z{0:03d}:'.format(optical_slices[i]) +
-            ' {0:d} '.format(len(i_tr)) +
-            '{0:.1f} {1:.1f} '.format(dxt, dyt) +
-            '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
+            physical_slices[i - 1] + '_Z{0:03d}:'.format(optical_slices[i - 1])
+            + physical_slices[i] + '_Z{0:03d}:'.format(optical_slices[i])
+            + ' {0:d} '.format(len(i_tr))
+            + '{0:.1f} {1:.1f} '.format(dxt, dyt)
+            + '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
         )
 
     # now that we know the slice to slice offset, we construct the catalogue
@@ -819,41 +841,13 @@ def register_slices(mos_zarr: Path):
         ref_slice = physical_slices[i - 1] + \
             '_Z{0:03d}'.format(optical_slices[i - 1])
 
-        _ind, _x, _y, _, _e = _get_beads(
-            mos_full[physical_slices[i]].attrs, optical_slices[i]
+        # only beads that have high reps
+        _, x_t, y_t, e_t = _get_good_beads(
+            mos_full, physical_slices[i], optical_slices[i], good_beads
         )
-        # we check which of these are repeated beads
-        ind_t = np.array([])
-        x_t = np.array([])
-        y_t = np.array([])
-        e_t = np.array([])
-        _j = 0
-        for this_id in _ind:
-            temp = this_slice + ':{0:05d}'.format(int(this_id))
-            if temp in good_beads:
-                ind_t = np.append(ind_t, this_id)
-                x_t = np.append(x_t, _x[_j])
-                y_t = np.append(y_t, _y[_j])
-                e_t = np.append(e_t, _e[_j])
-            _j += 1
-
-        _ind, _x, _y, _, _e = _get_beads(
-            mos_full[physical_slices[i - 1]].attrs, optical_slices[i - 1]
+        _, x_r, y_r, e_r = _get_good_beads(
+            mos_full, physical_slices[i - 1], optical_slices[i - 1], good_beads
         )
-        # we check which of these are repeated beads
-        ind_r = np.array([])
-        x_r = np.array([])
-        y_r = np.array([])
-        e_r = np.array([])
-        _j = 0
-        for this_id in _ind:
-            temp = ref_slice + ':{0:05d}'.format(int(this_id))
-            if temp in good_beads:
-                ind_r = np.append(ind_r, this_id)
-                x_r = np.append(x_r, _x[_j])
-                y_r = np.append(y_r, _y[_j])
-                e_r = np.append(e_r, _e[_j])
-            _j += 1
 
         dxt, dyt, edt, i_rt, i_tr = _match_cats(
             x_r, y_r, e_r,
@@ -865,15 +859,15 @@ def register_slices(mos_zarr: Path):
         dy2.append(dyt)
         dd2.append(edt)
 
-        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt)
-                     ** 2 + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
-        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr])
-                      ** 2 + (x_r[i_rt] - x_t[i_tr])**2)
+        dr = np.sqrt((y_r[i_rt] - y_t[i_tr] - dyt) **
+                     2 + (x_r[i_rt] - x_t[i_tr] - dxt)**2)
+        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) **
+                      2 + (x_r[i_rt] - x_t[i_tr])**2)
         log.info(
-            ref_slice + ':' + this_slice +
-            ' {0:d} '.format(len(i_tr)) +
-            '{0:.1f} {1:.1f} '.format(dxt, dyt) +
-            '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
+            ref_slice + ':' + this_slice
+            + ' {0:d} '.format(len(i_tr))
+            + '{0:.1f} {1:.1f} '.format(dxt, dyt)
+            + '{0:.1f} {1:.1f} '.format(np.median(dr), np.median(dr0))
         )
 
     # Now we store all the displacements as attrs
