@@ -69,5 +69,5 @@ def main(  # noqa: C901
 
     mos_dis = basedir / "mos.zarr"
     if "beadreg" in recipes:
-        # find_beads(mos_dis)
+        find_beads(mos_dis)
         register_slices(mos_dis)
