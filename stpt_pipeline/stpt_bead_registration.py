@@ -460,6 +460,34 @@ class bead_collection():
                 self.dy[i] = np.std(np.array(self.y_list[i]))
 
 
+def _check_bead(this_bead, done_x, done_y, full_shape):
+
+    if this_bead['conv'] is False:
+        return False
+
+    if (
+        (this_bead['x'] < -50) |
+        (this_bead['y'] < -50)
+    ):
+        return False
+
+    if (
+        (this_bead['x'] > full_shape[0] + 50)
+        | (this_bead['y'] > full_shape[1] + 50)
+    ):
+        return False
+
+    if this_bead['rad'] > Settings.feature_size[1]:
+        return False
+
+    r = np.sqrt(
+        (this_bead['x'] - np.array(done_x)) ** 2
+        + (this_bead['y'] - np.array(done_y)) ** 2
+    )
+    if r.min() < 0.5 * Settings.feature_size[0]:
+        return False
+
+
 def find_beads(mos_zarr: Path):
     """
         Finds all the beads in all the slices (physical and optical) in the
@@ -467,8 +495,23 @@ def find_beads(mos_zarr: Path):
 
         Attaches all the bead info as attrs to the zarr
     """
+
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
+
+    # conversion from dict headers to more informative
+    # metadata names
+    bead_par_to_attr_name = {
+        'bead_id': 'bead_id',
+        'conv': 'bead_conv',
+        'corner': 'bead_cutout_corner',
+        'err': 'bead_centre_err',
+        'fit': 'bead_fit_pars',
+        'rad': 'bead_rad',
+        'x': 'bead_x',
+        'y': 'bead_y',
+        'z': 'bead_z'
+    }
 
     mos_full = xr.open_zarr(f"{mos_zarr}", group='')
     mos_zoom = xr.open_zarr(
@@ -476,6 +519,12 @@ def find_beads(mos_zarr: Path):
     )
 
     slices = list(mos_full)
+
+    full_shape = mos_full[slices[0]].sel(
+        z=0,
+        channel=Settings.channel_to_use,
+        type='mosaic'
+    ).shape
 
     for this_slice in slices:
 
@@ -526,23 +575,10 @@ def find_beads(mos_zarr: Path):
                     good_cx[i], good_cy[i], pedestal, im_std, good_objects[i]))
             beads_1st_iter = compute(temp)[0]
 
-            n = 0
-            for t in beads_1st_iter:
-                if t[-1]:
-                    n += 1
-
-            log.info('  Found {0:d} possible beads'.format(n))
-
             # resampling to full arr
             full_labels = delayed(zoom)(
                 labels, Settings.zoom_level, order=0
             )
-
-            full_shape = mos_full[this_slice].sel(
-                z=this_optical,
-                channel=Settings.channel_to_use,
-                type='mosaic'
-            ).shape
 
             full_im = delayed(mos_full[this_slice].sel(
                 z=this_optical,
@@ -586,54 +622,25 @@ def find_beads(mos_zarr: Path):
 
             done_x = [0]
             done_y = [0]
+
             for this_bead in all_beads:
-                if this_bead['conv'] is False:
-                    continue
-                if this_bead['x'] < -50:
-                    continue
-                if this_bead['y'] < -50:
-                    continue
-                if this_bead['x'] > full_shape[0] + 50:
-                    continue
-                if this_bead['y'] > full_shape[1] + 50:
-                    continue
-                if this_bead['rad'] > Settings.feature_size[1]:
+
+                if _check_bead(this_bead, done_x, done_y, full_shape) is False:
                     continue
 
-                r = np.sqrt((this_bead['x'] - np.array(done_x))
-                            ** 2 + (this_bead['y'] - np.array(done_y))**2)
-                if r.min() < 0.5 * Settings.feature_size[0]:
-                    continue
-                else:
-                    done_x.append(this_bead['x'])
-                    done_y.append(this_bead['y'])
-
-                for this_key in this_bead.keys():
-                    if first_bead:
-                        bead_cat[this_key] = [this_bead[this_key]]
-                    else:
-                        bead_cat[this_key].append(this_bead[this_key])
+                done_x.append(this_bead['x'])
+                done_y.append(this_bead['y'])
 
                 if first_bead:
+                    for this_key in this_bead.keys():
+                        bead_cat[this_key] = [this_bead[this_key]]
                     bead_cat['z'] = [float(this_optical)]
                 else:
+                    for this_key in this_bead.keys():
+                        bead_cat[this_key].append(this_bead[this_key])
                     bead_cat['z'].append(float(this_optical))
 
                 first_bead = False
-
-            # conversion from dict headers to more informative
-            # metadata names
-            bead_par_to_attr_name = {
-                'bead_id': 'bead_id',
-                'conv': 'bead_conv',
-                'corner': 'bead_cutout_corner',
-                'err': 'bead_centre_err',
-                'fit': 'bead_fit_pars',
-                'rad': 'bead_rad',
-                'x': 'bead_x',
-                'y': 'bead_y',
-                'z': 'bead_z'
-            }
 
         # Store results as attrs in the full res slice
         for this_key in bead_cat.keys():
@@ -702,11 +709,34 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         if len(xr) > len(xt):
             return dx, dy, ex, i_ls, i_sl
         else:
-            return -dx, -dy, ex, i_sl, i_ls
+            return - dx, -dy, ex, i_sl, i_ls
+
     if len(xr) > len(xt):
         return dx, dy, i_ls, i_sl
     else:
         return -dx, -dy, i_sl, i_ls
+
+
+def _get_good_beads(mos_full, phys, opt, good_beads):
+    _ind, _x, _y, _, _e = _get_beads(
+        mos_full[phys].attrs, opt
+    )
+    # we check which of these are repeated beads
+    ind_t = np.array([])
+    x_t = np.array([])
+    y_t = np.array([])
+    e_t = np.array([])
+    _j = 0
+    for this_id in _ind:
+        temp = phys + ':{0:05d}'.format(int(this_id))
+        if temp in good_beads:
+            ind_t = np.append(ind_t, this_id)
+            x_t = np.append(x_t, _x[_j])
+            y_t = np.append(y_t, _y[_j])
+            e_t = np.append(e_t, _e[_j])
+        _j += 1
+
+    return ind_t, x_t, y_t, e_t
 
 
 def register_slices(mos_zarr: Path):
@@ -812,41 +842,13 @@ def register_slices(mos_zarr: Path):
         ref_slice = physical_slices[i - 1] + \
             '_Z{0:03d}'.format(optical_slices[i - 1])
 
-        _ind, _x, _y, _, _e = _get_beads(
-            mos_full[physical_slices[i]].attrs, optical_slices[i]
+        # only beads that have high reps
+        _, x_t, y_t, e_t = _get_good_beads(
+            mos_full, physical_slices[i], optical_slices[i], good_beads
         )
-        # we check which of these are repeated beads
-        ind_t = np.array([])
-        x_t = np.array([])
-        y_t = np.array([])
-        e_t = np.array([])
-        _j = 0
-        for this_id in _ind:
-            temp = this_slice + ':{0:05d}'.format(int(this_id))
-            if temp in good_beads:
-                ind_t = np.append(ind_t, this_id)
-                x_t = np.append(x_t, _x[_j])
-                y_t = np.append(y_t, _y[_j])
-                e_t = np.append(e_t, _e[_j])
-            _j += 1
-
-        _ind, _x, _y, _, _e = _get_beads(
-            mos_full[physical_slices[i - 1]].attrs, optical_slices[i - 1]
+        _, x_r, y_r, e_r = _get_good_beads(
+            mos_full, physical_slices[i - 1], optical_slices[i - 1], good_beads
         )
-        # we check which of these are repeated beads
-        ind_r = np.array([])
-        x_r = np.array([])
-        y_r = np.array([])
-        e_r = np.array([])
-        _j = 0
-        for this_id in _ind:
-            temp = ref_slice + ':{0:05d}'.format(int(this_id))
-            if temp in good_beads:
-                ind_r = np.append(ind_r, this_id)
-                x_r = np.append(x_r, _x[_j])
-                y_r = np.append(y_r, _y[_j])
-                e_r = np.append(e_r, _e[_j])
-            _j += 1
 
         dxt, dyt, edt, i_rt, i_tr = _match_cats(
             x_r, y_r, e_r,
