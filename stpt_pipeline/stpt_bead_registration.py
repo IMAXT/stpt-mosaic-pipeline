@@ -521,7 +521,7 @@ def find_beads(mos_zarr: Path):
     slices = list(mos_full)
 
     full_shape = mos_full[slices[0]].sel(
-        z=this_optical,
+        z=0,
         channel=Settings.channel_to_use,
         type='mosaic'
     ).shape
