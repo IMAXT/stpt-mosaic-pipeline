@@ -5,4 +5,3 @@ Mosaic (:mod:`stpt_pipeline.stpt_mosaic`)
 
 .. automodule:: stpt_pipeline.stpt_mosaic
    :members:
-
