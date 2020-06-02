@@ -58,6 +58,6 @@ setup(
     zip_safe=False,
     dependency_links=[
         "https://imaxt.ast.cam.ac.uk/pip/imaxt-image",
-        "https://imaxt.ast.cam.ac.uk/pip/zarr",
+        "https://imaxt.ast.cam.ac.uk/pip/owl-pipeline-develop",
     ],
 )
