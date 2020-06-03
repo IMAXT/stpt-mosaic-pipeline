@@ -693,8 +693,8 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
             i_sl.append(i)
             i_ls.append(r.argmin())
         r_sl = np.array(r_sl)
-        # combined error
-        e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2)
+        # combined error, minimum error should be 2
+        e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2).clip(2)
 
         # only 3sigma matches
         ii = np.where(
