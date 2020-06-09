@@ -3,8 +3,8 @@ History
 =======
 
 
-WIP
----
+0.4.0 (2020-06-09)
+------------------
 
 * Improve performance of distortion correction
 * Improve performace of mosaic creation
