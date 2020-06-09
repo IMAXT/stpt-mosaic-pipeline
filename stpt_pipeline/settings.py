@@ -55,26 +55,27 @@ class Settings:
     """Relative tolerance for convergence when calculating offsets
     """
 
-    mosaic_scale = 5.57  # mosaic displacement units to pixel
-
-    # allowed_error_px = 5.
-    """allowed pixel difference when comparing measured disp with mosaic
+    mosaic_scale = 5.57
+    """mosaic displacement units to pixel
     """
 
     flat_file = "/data/meds1_a/eglez/imaxt/flat_dev.nc"
     dark_file = "/data/meds1_a/eglez/imaxt/dark_dev.nc"
 
-    """Settings for bead detection
-    """
-    """ zoom level to be used for 1st pass detection
-    """
+    # Settings for bead detection
+
     zoom_level = 8
-
-    """ Min/Max allowed bead size
+    """zoom level to be used for 1st pass detection
     """
-    feature_size = [50., 500.]
 
-    """ Detection threshold for beads and biological sample
+    feature_size = [50.0, 500.0]
+    """Min/Max allowed bead size
     """
-    sample_detection_threshold = 2.
-    bead_detection_threshold = 5.
+
+    sample_detection_threshold = 2.0
+    """Detection threshold for biological sample
+    """
+
+    bead_detection_threshold = 5.0
+    """Detection threshold for beads
+    """

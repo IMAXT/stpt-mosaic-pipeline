@@ -2,6 +2,14 @@
 History
 =======
 
+
+WIP
+---
+
+* Improve performance of distortion correction
+* Improve performace of mosaic creation
+* Add multi-slice registration
+
 0.3.0 (2020-02-20)
 ------------------
 
