@@ -11,12 +11,6 @@ from .settings import Settings
 from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
 
-<<<<<<< HEAD
-=======
-
-log = logging.getLogger("owl.daemon.pipeline")
->>>>>>> 031e514... Add slice registration
-
 
 def main(  # noqa: C901
     *, root_dir: Path, output_dir: Path, recipes: List, cof_dist: Dict = None
@@ -74,5 +68,10 @@ def main(  # noqa: C901
 
     if "tiff" in recipes:
         mos.to_tiff(output_dir_full)
+
+    mos_dis = output_dir_full / "mos.zarr"
+    if "beadreg" in recipes:
+        find_beads(mos_dis)
+        register_slices(mos_dis)
 
     logger.info("Pipeline completed")
