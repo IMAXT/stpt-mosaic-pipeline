@@ -3,6 +3,12 @@ History
 =======
 
 
+0.4.1 (2020-06-10)
+------------------
+
+* Improved performance of downsample step
+* Fix multi-slice registration memory consumption
+ 
 0.4.0 (2020-06-09)
 ------------------
 
