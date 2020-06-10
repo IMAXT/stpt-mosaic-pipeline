@@ -541,7 +541,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             for i in range(len(good_objects)):
                 temp.append(
                     _fit_bead_1stpass(
-                        im.values,
+                        im.data,
                         labels,
                         good_cx[i],
                         good_cy[i],
