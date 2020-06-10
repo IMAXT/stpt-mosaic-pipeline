@@ -237,7 +237,6 @@ def get_cutout(im, ll_corner, width, full_shape):
     return im_t
 
 
-@delayed
 def _fit_bead_2ndpass(
     full_im,
     full_conf,
@@ -275,9 +274,8 @@ def _fit_bead_2ndpass(
             "fit": [0.0, 0.0, 0.0, 0.0, 0.0],
             "conv": False,
             "corner": ll_corner,
-            "err": 500,
         }
-        return empty_res
+        return empty_res, 500
 
     conf_t = get_cutout(full_conf, ll_corner, window_size, full_shape)
     err_t = get_cutout(full_err, ll_corner, window_size, full_shape)
@@ -286,8 +284,8 @@ def _fit_bead_2ndpass(
 
     # brighter pixels dominate the fit, therefore contribute
     # more to the error
-    temp = np.sqrt(err_t / conf_t.clip(1, 1e6))
-    err_bead = np.sum(temp * (im_t - pedestal) ** 2) / np.sum((im_t - pedestal) ** 2)
+    temp = da.sqrt(err_t / conf_t.clip(1, 1e6))
+    err_bead = da.sum(temp * (im_t - pedestal) ** 2) / da.sum((im_t - pedestal) ** 2)
 
     theta = [
         cen_x,
@@ -297,11 +295,9 @@ def _fit_bead_2ndpass(
         estimated_pars[5],
     ]
 
-    res = fit_bead(im_t, label_t, theta, pedestal, im_std, bead_num, ll_corner)
-    # appending error
-    res["err"] = err_bead
+    res = delayed(fit_bead)(im_t, label_t, theta, pedestal, im_std, bead_num, ll_corner)
 
-    return res
+    return res, err_bead
 
 
 def fit_bead(
@@ -526,16 +522,16 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             ix, iy = np.where(conf.values > 0)
             pedestal = np.median(im.values[ix, iy])
             im_std = 1.48 * mad(im.values[ix, iy], axis=None)
-            logger.info("  Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
+            logger.debug("Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
 
             # Detection of all features with bead size
             labels, good_objects, good_cx, good_cy = det_features(
                 im.values, pedestal, im_std
             )
 
-            logger.info("  Found {0:d} preliminary beads".format(len(good_objects)))
+            logger.debug("Found {0:d} preliminary beads".format(len(good_objects)))
 
-            logger.info("  Filtering preliminary detections")
+            logger.debug("Filtering preliminary detections")
 
             temp = []
             for i in range(len(good_objects)):
@@ -554,6 +550,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             # resampling to full arr
             full_labels = delayed(zoom)(labels, Settings.zoom_level, order=0)
+            full_labels = da.from_delayed(full_labels, shape=full_shape, dtype="int")
 
             full_im = (
                 mos_full[this_slice]
@@ -574,7 +571,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             )
 
             temp = []
-            logger.info("Fitting all beads...")
+            logger.debug("Fitting all beads...")
             for i in range(len(beads_1st_iter)):
                 if beads_1st_iter[i][-1] is False:
                     continue
@@ -609,7 +606,8 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             done_x = [0]
             done_y = [0]
 
-            for this_bead in all_beads:
+            for this_bead, bead_err in all_beads:
+                this_bead["err"] = bead_err
 
                 if _check_bead(this_bead, done_x, done_y, full_shape) is False:
                     continue
