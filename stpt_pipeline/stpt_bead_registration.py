@@ -114,14 +114,12 @@ def mass_center(im, mask):
         -------
         x_c,y_c: position of the COM in image coordinates (x along columns)
     """
-
     x = np.arange(im.shape[0])
     y = np.arange(im.shape[1])
     t = (im * mask).sum(1)
     x_c = (x * t).sum() / t.sum()
     t = (im * mask).sum(0)
     y_c = (y * t).sum() / t.sum()
-    #
     return x_c, y_c
 
 
@@ -131,7 +129,6 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
         Does the 1st fit to the bead profile,
         using the downsampled image
     """
-
     # The first iteration of the bead centre is the candidate pixel
     x_t = np.mean(xc)
     y_t = np.mean(yc)
@@ -185,10 +182,9 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
             convergence = False
 
     # if failed to converge after 100 iters, this is not
-    # likely a bead, so not fit. Tipycally, a centre
+    # likely a bead, so not fit. Typically, a centre
     # is found in less than 10 iterations
     if convergence:
-
         theta = [
             center_i[0],
             center_i[1],
@@ -202,7 +198,6 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
         )
 
         # total radius when profile drops to 0.1*std
-
         rad = res["x"][3] * (-1.0 * np.log(0.1 * im_std / res["x"][2])) ** (
             1.0 / (2 * res["x"][4])
         )
@@ -224,11 +219,11 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
     return cen_x, cen_y, rad, peak, width, exp, bead_num, conv
 
 
-def get_cutout(im, ll_corner, width, full_shape):
-
+def get_cutout(im, ll_corner, width):
+    shape = im.shape
     ur_corner = [
-        int(np.min([full_shape[0], ll_corner[0] + width])),
-        int(np.min([full_shape[1], ll_corner[1] + width])),
+        int(np.min([shape[0], ll_corner[0] + width])),
+        int(np.min([shape[1], ll_corner[1] + width])),
     ]
 
     # these are the full images that come as a zarr pointer
@@ -246,12 +241,10 @@ def _fit_bead_2ndpass(
     pedestal,
     im_std,
     bead_num,
-    full_shape,
 ):
     """
         Does the final fit over the full res image
     """
-
     cen_x = estimated_pars[0] * Settings.zoom_level
     cen_y = estimated_pars[1] * Settings.zoom_level
 
@@ -262,7 +255,7 @@ def _fit_bead_2ndpass(
         int(np.max([0, estimated_pars[1] * Settings.zoom_level - 0.5 * window_size])),
     ]
 
-    im_t = get_cutout(full_im, ll_corner, window_size, full_shape)
+    im_t = get_cutout(full_im, ll_corner, window_size)
 
     # check for image size
     if (im_t.shape[0] < 5) or (im_t.shape[1] < 5):
@@ -277,10 +270,10 @@ def _fit_bead_2ndpass(
         }
         return empty_res, 500
 
-    conf_t = get_cutout(full_conf, ll_corner, window_size, full_shape)
-    err_t = get_cutout(full_err, ll_corner, window_size, full_shape)
+    conf_t = get_cutout(full_conf, ll_corner, window_size)
+    err_t = get_cutout(full_err, ll_corner, window_size)
 
-    label_t = get_cutout(full_labels, ll_corner, window_size, full_shape).astype(int)
+    label_t = get_cutout(full_labels, ll_corner, window_size).astype(int)
 
     # brighter pixels dominate the fit, therefore contribute
     # more to the error
@@ -331,7 +324,6 @@ def fit_bead(
         with the bead centre in absolute coordinates, the total radius, the convergence
         from optimize, the fit parameters and the estimated centering error
     """
-
     cen_x, cen_y, peak, width, exp = theta
 
     im_t = im - pedestal
@@ -378,7 +370,6 @@ def fit_bead(
 
 
 class bead_collection:
-
     """
         This holds all the beads from all the slices of a mosaic,
         and keeps track of which ones are the same bead at different
@@ -468,7 +459,6 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
         Attaches all the bead info as attrs to the zarr
     """
-
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
 
@@ -491,14 +481,9 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
     slices = list(mos_full)
 
-    full_shape = (
-        mos_full[slices[0]]
-        .sel(z=0, channel=Settings.channel_to_use, type="mosaic")
-        .shape
-    )
+    full_shape = (mos_full.y.shape[0], mos_full.x.shape[0])
 
     for this_slice in slices:
-
         optical_slices = list(mos_full[slices[0]].z.values)
 
         first_bead = True
@@ -591,7 +576,6 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                         pedestal,
                         im_std,
                         good_objects[i],
-                        full_shape,
                     )
                 )
             all_beads = compute(temp)[0]
@@ -602,7 +586,6 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             # We'll store beads in the attrs for the physical slice
             # so we need to add the optical slice
             #
-
             done_x = [0]
             done_y = [0]
 
@@ -648,7 +631,6 @@ def _get_beads(slice_obj, z_val):
 
 
 def _match_cats(xr, yr, er, xt, yt, et, errors=False):
-
     if len(xr) > len(xt):
         xs = np.array(xt)
         ys = np.array(yt)
@@ -732,7 +714,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         and calculates an average displacement so that all
         slices are matched to the first one
     """
-
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
 
@@ -754,7 +735,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     for i in range(1, len(physical_slices)):
 
         # We compare each slice (_t) with the previous one (_r)
-
         _, x_t, y_t, _, e_t = _get_beads(
             mos_full[physical_slices[i]].attrs, optical_slices[i]
         )
@@ -786,7 +766,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     bb = bead_collection()
 
     for i in range(len(physical_slices)):
-
         ref_slice = physical_slices[i] + "_Z{0:03d}".format(optical_slices[i])
 
         # because dx,dy are slice to slice, the total displacement
@@ -827,7 +806,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     dd2 = [0.0]
     logger.info("2nd pass slice shifts")
     for i in range(1, len(physical_slices)):
-
         this_slice = physical_slices[i] + "_Z{0:03d}".format(optical_slices[i])
         ref_slice = physical_slices[i - 1] + "_Z{0:03d}".format(optical_slices[i - 1])
 
@@ -872,7 +850,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         "opt_z": [],
     }
     for i in range(len(physical_slices)):
-
         cube_reg["slice"].append(physical_slices[i])
         cube_reg["opt_z"].append(float(optical_slices[i]))
 
