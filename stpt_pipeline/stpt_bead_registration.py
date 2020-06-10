@@ -555,22 +555,22 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             # resampling to full arr
             full_labels = delayed(zoom)(labels, Settings.zoom_level, order=0)
 
-            full_im = delayed(
+            full_im = (
                 mos_full[this_slice]
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="mosaic")
-                .values
+                .data
             )
 
-            full_conf = delayed(
+            full_conf = (
                 mos_full[this_slice]
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="conf")
-                .values
+                .data
             )
 
-            full_err = delayed(
+            full_err = (
                 mos_full[this_slice]
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="err")
-                .values
+                .data
             )
 
             temp = []
