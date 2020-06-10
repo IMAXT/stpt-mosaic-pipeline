@@ -1,6 +1,12 @@
 import cv2
 import dask.array as da
 import xarray as xr
+from dask import delayed
+
+
+def transform(im):
+    res = delayed(cv2.pyrDown)(im.data)
+    return da.from_delayed(res, shape=(im.shape[0] // 2, im.shape[1] // 2), dtype="int")
 
 
 def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
@@ -27,7 +33,7 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
             arr_ch = []
             for ch in arr.channel:
                 im = arr.sel(z=z.values, type=t.values, channel=ch.values)
-                res = im.data.map_blocks(cv2.pyrDown, chunks=(ny // 2, nx // 2))
+                res = transform(im)
                 arr_ch.append(res.rechunk(ny, nx))
             arr_z.append(da.stack(arr_ch))
         arr_t.append(da.stack(arr_z))
