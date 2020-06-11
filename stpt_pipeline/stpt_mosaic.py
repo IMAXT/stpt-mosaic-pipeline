@@ -1,3 +1,4 @@
+import shutil
 import traceback
 from pathlib import Path
 from typing import List, Tuple
@@ -42,7 +43,9 @@ def arr2tiff(output, arr, scl):
 @retry(Exception)
 def _get_image(group, imgtype, shape, dtype="float32"):
     try:
-        arr = group.create_dataset(imgtype, shape=shape, chunks=(520, 520), dtype=dtype)
+        arr = group.create_dataset(
+            imgtype, shape=shape, chunks=(1040, 1040), dtype=dtype
+        )
     except ValueError:
         arr = group[imgtype]
     return arr
@@ -723,7 +726,7 @@ class Section:
                     )
                     nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
                     mos = da.from_delayed(res, self.stage_size, dtype="float32")
-                    mos = mos.rechunk((2080, 2080))
+                    mos = mos.rechunk((1040, 1040))
                     st = mos.to_zarr(nimg, compute=False, return_stored=False)
                     results.append(st)
                 futures = client.compute(results)
@@ -829,6 +832,8 @@ class Section:
         arr = self._compute_final_mosaic(z)
         ds = xr.Dataset({self._section.name: arr})
         ds.to_zarr(output / "mos.zarr", mode="a")
+        # clean temporary mosaic
+        shutil.rmtree(f"{output}/temp.zarr", ignore_errors=True)
         logger.info("Mosaic saved %s", output / "mos.zarr")
 
 

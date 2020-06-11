@@ -34,7 +34,7 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
             for ch in arr.channel:
                 im = arr.sel(z=z.values, type=t.values, channel=ch.values)
                 res = transform(im)
-                arr_ch.append(res.rechunk(520, 520))
+                arr_ch.append(res.rechunk(1024, 1024))
             arr_z.append(da.stack(arr_ch))
         arr_t.append(da.stack(arr_z))
     arr_t = da.stack(arr_t)
