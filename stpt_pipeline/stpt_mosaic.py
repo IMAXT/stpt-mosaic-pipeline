@@ -723,7 +723,7 @@ class Section:
                     )
                     nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
                     mos = da.from_delayed(res, self.stage_size, dtype="float32")
-                    mos = mos.rechunk((520, 520))
+                    mos = mos.rechunk((2080, 2080))
                     st = mos.to_zarr(nimg, compute=False, return_stored=False)
                     results.append(st)
                 futures = client.compute(results)
