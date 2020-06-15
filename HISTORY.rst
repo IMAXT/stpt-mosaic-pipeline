@@ -3,6 +3,12 @@ History
 =======
 
 
+0.4.2 (2020-06-15)
+------------------
+
+* Modify chunk size to run smaller number of tasks
+* Clean temporary files
+
 0.4.1 (2020-06-10)
 ------------------
 
