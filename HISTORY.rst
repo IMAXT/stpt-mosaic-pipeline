@@ -3,7 +3,7 @@ History
 =======
 
 
-0.4.2 (2020-06-15)
+0.4.3 (2020-06-17)
 ------------------
 
 * Modify chunk size to run smaller number of tasks
