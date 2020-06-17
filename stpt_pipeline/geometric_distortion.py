@@ -13,7 +13,6 @@ from skimage.transform import warp
 import zarr
 from owl_dev.logging import logger
 
-from .retry import retry
 from .settings import Settings
 from .stpt_displacement import mask_image
 from .utils import get_coords
@@ -101,7 +100,6 @@ def apply_geometric_transform(
     return res
 
 
-@retry(Exception)
 def _write_dataset(arr, *, dark, flat, output, cof_dist):
     logger.debug("Applying optical distortion and normalization %s", arr.name)
     for k in list(arr.z.values):
