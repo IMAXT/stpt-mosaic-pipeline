@@ -1,4 +1,6 @@
+import shutil
 import traceback
+from contextlib import suppress
 from functools import partial
 from pathlib import Path
 from typing import Dict, List
@@ -10,7 +12,6 @@ from dask import delayed
 from distributed import Client, as_completed
 from skimage.transform import warp
 
-import zarr
 from owl_dev.logging import logger
 
 from .settings import Settings
@@ -137,13 +138,20 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
         g[arr.name] = this
 
         try:
-            g.to_zarr(output, mode="a", append_dim="z")
+            g.to_zarr(output, mode="a", group=f"G{arr.name}", append_dim="z")
         except ValueError:
-            g.to_zarr(output, mode="a")
-        except Exception:
-            zz = zarr.open(output)
-            del zz[arr.name]
-            raise Exception(f"Section {arr.name} already exists")
+            g.to_zarr(output, mode="a", group=f"G{arr.name}")
+
+        del this
+        del g
+
+    output = Path(output)
+    for d in ["x", "y", "z", "tile", "channel", arr.name]:
+        with suppress(FileExistsError):
+            (output / f"G{arr.name}" / d).replace(output / d)
+
+    shutil.rmtree(f"{output}/G{arr.name}", ignore_errors=True)
+
     return f"{output}[{arr.name}]"
 
 
