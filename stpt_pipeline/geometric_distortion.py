@@ -104,50 +104,48 @@ def apply_geometric_transform(
 @retry(Exception)
 def _write_dataset(arr, *, dark, flat, output, cof_dist):
     logger.debug("Applying optical distortion and normalization %s", arr.name)
-    g = xr.Dataset()
-    tiles = []
-    for i in arr.tile:
-        channels = []
-        for j in arr.channel:
-            im = arr.sel(tile=i, channel=j) / Settings.norm_val
+    for k in list(arr.z.values):
+        g = xr.Dataset()
+        tiles = []
+        for i in arr.tile:
+            channels = []
+            for j in arr.channel:
+                im = arr.sel(tile=i, channel=j) / Settings.norm_val
 
-            n = int(j.values)
+                n = int(j.values)
 
-            d = dark[n] / Settings.norm_val
-            f = flat[n]
-            img = da.stack(
-                [
-                    apply_geometric_transform(im.sel(z=k).data, d, f, cof_dist,)
-                    for k in arr.z
-                ]
-            )
-            channels.append(img)
+                d = dark[n] / Settings.norm_val
+                f = flat[n]
+                img = apply_geometric_transform(im.sel(z=k).data, d, f, cof_dist)
+                channels.append([img])
 
-        channels = da.stack(channels)
-        tiles.append(channels)
-    tiles = da.stack(tiles)
-    ntiles, nchannels, nz, ny, nx = tiles.shape
-    this = xr.DataArray(
-        tiles,
-        dims=("tile", "channel", "z", "y", "x"),
-        name=arr.name,
-        coords={
-            "tile": range(ntiles),
-            "channel": range(nchannels),
-            "z": range(nz),
-            "y": range(ny),
-            "x": range(nx),
-        },
-    )
-    this.attrs = arr.attrs
-    g[arr.name] = this
+            channels = da.stack(channels)
+            tiles.append(channels)
+        tiles = da.stack(tiles)
+        ntiles, nchannels, nz, ny, nx = tiles.shape
+        this = xr.DataArray(
+            tiles,
+            dims=("tile", "channel", "z", "y", "x"),
+            name=arr.name,
+            coords={
+                "tile": range(ntiles),
+                "channel": range(nchannels),
+                "z": [k],
+                "y": range(ny),
+                "x": range(nx),
+            },
+        )
+        this.attrs = arr.attrs
+        g[arr.name] = this
 
-    try:
-        g.to_zarr(output, mode="a")
-    except Exception:
-        zz = zarr.open(output)
-        del zz[arr.name]
-        raise Exception(f"Section {arr.name} already exists")
+        try:
+            g.to_zarr(output, mode="a", append_dim="z")
+        except ValueError:
+            g.to_zarr(output, mode="a")
+        except Exception:
+            zz = zarr.open(output)
+            del zz[arr.name]
+            raise Exception(f"Section {arr.name} already exists")
     return f"{output}[{arr.name}]"
 
 
