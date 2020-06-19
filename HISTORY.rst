@@ -3,11 +3,12 @@ History
 =======
 
 
-0.4.3 (2020-06-17)
+0.4.4 (2020-06-19)
 ------------------
 
 * Modify chunk size to run smaller number of tasks
 * Clean temporary files
+* Perform distortion correction per z slice
 
 0.4.1 (2020-06-10)
 ------------------
