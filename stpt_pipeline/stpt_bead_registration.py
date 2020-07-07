@@ -70,7 +70,7 @@ def det_features(im, pedestal, im_std):
     # now we mask the sample
     mask = np.ones_like(labels)
     for i in sample_label:
-        mask[(labels == sample_label)] = 0
+        mask[(labels == i)] = 0
 
     labels, n_objs = label(
         clean_im * mask > Settings.bead_detection_threshold * im_std)
