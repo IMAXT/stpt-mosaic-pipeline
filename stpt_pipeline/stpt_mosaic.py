@@ -416,8 +416,10 @@ class Section:
             & (avg_flux > np.median(avg_flux))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -427,8 +429,10 @@ class Section:
             & (avg_flux > np.median(avg_flux))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -505,7 +509,8 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0 *
+                                            default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -528,7 +533,8 @@ class Section:
                             )
 
                         else:
-                            default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0 *
+                                            default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
@@ -559,18 +565,25 @@ class Section:
                     ):
                         # Dimensions in the mosaic and images have opposite directions
                         temp_pos[0].append(
-                            abs_pos[ref_img, 0] + self._px[f"{ref_img}:{this_img}"][0]
+                            abs_pos[ref_img, 0] +
+                            self._px[f"{ref_img}:{this_img}"][0]
                         )
                         temp_pos[1].append(
-                            abs_pos[ref_img, 1] + self._px[f"{ref_img}:{this_img}"][1]
+                            abs_pos[ref_img, 1] +
+                            self._px[f"{ref_img}:{this_img}"][1]
                         )
                         # weights
                         weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
+                        # check for nan
+                        if weight == 0:
+                            weight = 0.000001
                         temp_qual.append(pos_quality[ref_img])
                         prov_im.append(ref_img)
                     else:
-                        temp_pos[0].append(abs_pos[ref_img, 0] + default_desp[0])
-                        temp_pos[1].append(abs_pos[ref_img, 1] + default_desp[1])
+                        temp_pos[0].append(
+                            abs_pos[ref_img, 0] + default_desp[0])
+                        temp_pos[1].append(
+                            abs_pos[ref_img, 1] + default_desp[1])
                         weight.append(0.0000001 ** 2)  # artificially low weight
                         temp_qual.append(0.0)
                         prov_im.append(-1.0 * ref_img)
@@ -578,10 +591,12 @@ class Section:
                 weight = np.array(weight)
 
                 abs_pos[this_img, 0] = int(
-                    np.round((np.array(temp_pos[0]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[0]) * weight).sum() / weight.sum())
                 )
                 abs_pos[this_img, 1] = int(
-                    np.round((np.array(temp_pos[1]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[1]) * weight).sum() / weight.sum())
                 )
 
                 # this image has been fixed
@@ -697,7 +712,8 @@ class Section:
             # adding quality of global reference
             accumulated_qual.append(
                 np.sqrt(
-                    np.array(temp[1]) ** 2 + np.array(temp[1])[absolute_ref_img] ** 2
+                    np.array(temp[1]) ** 2 +
+                    np.array(temp[1])[absolute_ref_img] ** 2
                 )
             )
 
@@ -718,13 +734,15 @@ class Section:
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
-                g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+                g = z.create_group(
+                    f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
                 results = []
                 for imgtype in ["raw", "pos_err", "overlap"]:
                     res = _mosaic(
                         im_t, conf, abs_pos, abs_err, imgtype, out_shape=self.stage_size
                     )
-                    nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
+                    nimg = _get_image(
+                        g, imgtype, self.stage_size, dtype="float32")
                     mos = da.from_delayed(res, self.stage_size, dtype="float32")
                     mos = mos.rechunk((1040, 1040))
                     st = mos.to_zarr(nimg, compute=False, return_stored=False)
@@ -754,11 +772,13 @@ class Section:
 
             raw = (raw - Settings.bzero) / Settings.bscale
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["overlap"])
+                          for name, ch in offset.groups()])
                 * 100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["pos_err"])
+                          for name, ch in offset.groups()])
                 * 100
             )
             mos_overlap.append(overlap)
