@@ -634,16 +634,20 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
 def _get_beads(slice_obj, z_val):
 
-    z = np.array(slice_obj["bead_z"][:])
-    i_t = np.where(z == z_val)
+    if 'bead_z' in list(slice_obj.keys()):
 
-    xc = np.array(slice_obj["bead_x"][:])[i_t]
-    yc = np.array(slice_obj["bead_y"][:])[i_t]
-    err = np.array(slice_obj["bead_centre_err"][:])[i_t]
-    rad = np.array(slice_obj["bead_rad"][:])[i_t]
-    ind = np.array(slice_obj["bead_id"][:])[i_t]
+        z = np.array(slice_obj["bead_z"][:])
+        i_t = np.where(z == z_val)[0]
 
-    return ind, xc, yc, rad, err
+        xc = np.array(slice_obj["bead_x"][:])[i_t]
+        yc = np.array(slice_obj["bead_y"][:])[i_t]
+        err = np.array(slice_obj["bead_centre_err"][:])[i_t]
+        rad = np.array(slice_obj["bead_rad"][:])[i_t]
+        ind = np.array(slice_obj["bead_id"][:])[i_t]
+
+        return ind, xc, yc, rad, err
+    else:
+        return [], [], [], [], []
 
 
 def _match_cats(xr, yr, er, xt, yt, et, errors=False):
@@ -755,30 +759,46 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         _, x_t, y_t, _, e_t = _get_beads(
             mos_full[physical_slices[i]].attrs, optical_slices[i]
         )
+
         _, x_r, y_r, _, e_r = _get_beads(
             mos_full[physical_slices[i - 1]].attrs, optical_slices[i - 1]
         )
 
-        dxt, dyt, i_rt, i_tr = _match_cats(x_r, y_r, e_r, x_t, y_t, e_t)
-        dx.append(dxt)
-        dy.append(dyt)
+        if (len(x_t) > 0) & (len(x_r) > 0):
 
-        dr = np.sqrt(
-            (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-            (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
-        )
-        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                      (x_r[i_rt] - x_t[i_tr]) ** 2)
+            dxt, dyt, i_rt, i_tr = _match_cats(x_r, y_r, e_r, x_t, y_t, e_t)
+            dx.append(dxt)
+            dy.append(dyt)
 
-        logger.info(
-            physical_slices[i - 1]
-            + "_Z{0:03d}:".format(optical_slices[i - 1])
-            + physical_slices[i]
-            + "_Z{0:03d}:".format(optical_slices[i])
-            + " {0:d} ".format(len(i_tr))
-            + "{0:.1f} {1:.1f} ".format(dxt, dyt)
-            + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
-        )
+            dr = np.sqrt(
+                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
+                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+            )
+            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
+                          (x_r[i_rt] - x_t[i_tr]) ** 2)
+
+            logger.info(
+                physical_slices[i - 1]
+                + "_Z{0:03d}:".format(optical_slices[i - 1])
+                + physical_slices[i]
+                + "_Z{0:03d}:".format(optical_slices[i])
+                + " {0:d} ".format(len(i_tr))
+                + "{0:.1f} {1:.1f} ".format(dxt, dyt)
+                + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
+            )
+        else:
+            dx.append(0.0)
+            dy.append(0.0)
+
+            logger.info(
+                physical_slices[i - 1]
+                + "_Z{0:03d}:".format(optical_slices[i - 1])
+                + physical_slices[i]
+                + "_Z{0:03d}:".format(optical_slices[i])
+                + " {0:d} ".format(len(i_tr))
+                + "{0:.1f} {1:.1f} ".format(dxt, dyt)
+                + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
+            )
 
     # now that we know the slice to slice offset, we construct the catalogue
     # of all the beads
@@ -833,32 +853,49 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         _, x_t, y_t, e_t = _get_good_beads(
             mos_full, physical_slices[i], optical_slices[i], good_beads
         )
-        _, x_r, y_r, e_r = _get_good_beads(
-            mos_full, physical_slices[i - 1], optical_slices[i - 1], good_beads
-        )
 
-        dxt, dyt, edt, i_rt, i_tr = _match_cats(
-            x_r, y_r, e_r, x_t, y_t, e_t, errors=True
-        )
+        if len(x_t) > 0:
+            _, x_r, y_r, e_r = _get_good_beads(
+                mos_full, physical_slices[i -
+                                          1], optical_slices[i - 1], good_beads
+            )
 
-        dx2.append(dxt)
-        dy2.append(dyt)
-        dd2.append(edt)
+            dxt, dyt, edt, i_rt, i_tr = _match_cats(
+                x_r, y_r, e_r, x_t, y_t, e_t, errors=True
+            )
 
-        dr = np.sqrt(
-            (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-            (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
-        )
-        dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                      (x_r[i_rt] - x_t[i_tr]) ** 2)
-        logger.info(
-            ref_slice
-            + ":"
-            + this_slice
-            + " {0:d} ".format(len(i_tr))
-            + "{0:.1f} {1:.1f} ".format(dxt, dyt)
-            + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
-        )
+            dx2.append(dxt)
+            dy2.append(dyt)
+            dd2.append(edt)
+
+            dr = np.sqrt(
+                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
+                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+            )
+            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
+                          (x_r[i_rt] - x_t[i_tr]) ** 2)
+            logger.info(
+                ref_slice
+                + ":"
+                + this_slice
+                + " {0:d} ".format(len(i_tr))
+                + "{0:.1f} {1:.1f} ".format(dxt, dyt)
+                + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
+            )
+        else:
+            # NO beads in this slice
+            dx2.append(0.0)
+            dy2.append(0.0)
+            dd2.append(100.0)
+
+            logger.info(
+                ref_slice
+                + ":"
+                + this_slice
+                + " {0:d} ".format(len(i_tr))
+                + "{0:.1f} {1:.1f} ".format(0.0, 0.0)
+                + "{0:.1f} {1:.1f} ".format(0.0, 0.0)
+            )
 
     # Now we store all the displacements as attrs
     cube_reg = {

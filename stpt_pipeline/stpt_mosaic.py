@@ -136,7 +136,21 @@ class Section:
         return len(self._section.z)
 
     def get_img_section(self, offset: int, channel: int) -> xr.DataArray:
-        img_cube = self._section.sel(z=offset, channel=channel)
+
+        # 20200717 added switch to add all channels
+
+        if channel == -1:
+            n = 0
+            for this_channel in self._section.channel.values:
+                if n == 0:
+                    img_cube = self._section.sel(z=offset, channel=this_channel)
+                else:
+                    img_cube += self._section.sel(z=offset,
+                                                  channel=this_channel)
+                n += 1.0
+        else:
+            img_cube = self._section.sel(z=offset, channel=channel)
+
         return img_cube
 
     def find_grid(self) -> Tuple[np.ndarray]:
@@ -209,13 +223,28 @@ class Section:
         # convert to find_shifts
         results = []
         logger.info("Processing section %s", self._section.name)
-        img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
+        # debug
+        # img_cube = self.get_img_section(0, Settings.channel_to_use - 1)
+        img_cube = self.get_img_section(0, -1)
 
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
 
         dx0, dy0, delta_x, delta_y = self.find_grid()
         dx_mos, dy_mos = self.get_mos_pos()
+
+        # We calculate the ref_img here, for if the slice
+        # has no data (very low max. avg flux), we skip calculations too
+        img_cube_stack = da.stack(img_cube)
+        # ref image is the one with the max integrated flux
+        cube_totals = img_cube_stack.sum(axis=(1, 2))
+        cube_totals = cube_totals.compute()
+        self.cube_means = cube_totals / 2080.0 ** 2
+
+        self.absolute_ref_img = self.cube_means.argmax()
+        self.mean_ref_img = self.cube_means.max()
+
+        logger.info("Max mean: {0:.5f}".format(self.mean_ref_img))
 
         # If the default displacements are too large
         # to for overlaps, stick with the default scale
@@ -232,6 +261,14 @@ class Section:
             logger.info(
                 "Displacement in Y too large: {0:.1f}".format(
                     delta_y / Settings.mosaic_scale
+                )
+            )
+            self.offset_mode = "default"
+
+        if self.mean_ref_img < 0.05:
+            logger.info(
+                "Avg. flux too low: {0:.3f}<0.05".format(
+                    self.mean_ref_img
                 )
             )
             self.offset_mode = "default"
@@ -271,13 +308,6 @@ class Section:
                     im_ref = im_i
                     sign = 1
 
-                logger.debug(
-                    "Initial offsets i: %d j: %d dx: %d dy: %d",
-                    ref_img,
-                    obj_img,
-                    desp[0],
-                    desp[1],
-                )
                 if self.offset_mode == "sampled":
                     res = delayed(find_overlap_conf)(
                         im_ref.data, im_obj.data, dist_conf, dist_conf, desp
@@ -285,6 +315,13 @@ class Section:
                     results.append(_sink(ref_img, obj_img, res, sign))
 
                 else:
+                    logger.debug(
+                        "Initial offsets i: %d j: %d dx: %d dy: %d",
+                        ref_img,
+                        obj_img,
+                        desp[0],
+                        desp[1],
+                    )
                     results.append([ref_img, obj_img, desp[0], desp[1], sign])
 
         if self.offset_mode == "sampled":
@@ -341,7 +378,7 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[0]) < 5000) & (abs(p[0] > 500) & (a > 0.5))
+                if (abs(p[0]) < 5000) & (abs(p[0] > 500) & (abs(a) > 0.5))
             ]
         )
         y_scale = np.median(
@@ -350,9 +387,14 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[1]) < 5000) & (abs(p[1] > 500) & (a > 0.5))
+                if (abs(p[1]) < 5000) & (abs(p[1] > 500) & (abs(a) > 0.5))
             ]
         )
+
+        if np.isnan(x_scale):
+            x_scale = Settings.mosaic_scale
+        if np.isnan(y_scale):
+            y_scale = Settings.mosaic_scale
 
         logger.debug("Scale %f %f", x_scale, y_scale)
 
@@ -413,7 +455,7 @@ class Section:
         ii = np.where(
             (np.abs(px_x) < short_displacement_x)
             & (np.abs(px_y) > short_displacement_y)
-            & (avg_flux > np.median(avg_flux))
+            & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_x = [
             (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
@@ -426,7 +468,7 @@ class Section:
         ii = np.where(
             (np.abs(px_y) < short_displacement_y)
             & (np.abs(px_x) > short_displacement_x)
-            & (avg_flux > np.median(avg_flux))
+            & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_y = [
             (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
@@ -559,9 +601,14 @@ class Section:
                                 )
                                 ** 2
                             )
-
-                    if (err_long_px < error_long_threshold) & (
-                        err_short_px < error_short_threshold
+                    # 20200710 added check for mi, avg because there are some slices
+                    # that despite having overlaps, there seems to be no info
+                    # and lead to nans
+                    if (
+                        (err_long_px < error_long_threshold) &
+                        (err_short_px < error_short_threshold) &
+                        (self._mi[f"{ref_img}:{this_img}"] > 0) &
+                        (self._avg[f"{ref_img}:{this_img}"] > 0.05)
                     ):
                         # Dimensions in the mosaic and images have opposite directions
                         temp_pos[0].append(
@@ -574,9 +621,6 @@ class Section:
                         )
                         # weights
                         weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
-                        # check for nan
-                        if weight == 0:
-                            weight = 0.000001
                         temp_qual.append(pos_quality[ref_img])
                         prov_im.append(ref_img)
                     else:
@@ -612,14 +656,15 @@ class Section:
         """
         logger.info("Processing section %s", self._section.name)
 
-        img_cube = self.get_img_section(0, 1)
-        img_cube_stack = da.stack(img_cube)
-        # ref image is the one with the max integrated flux
-        cube_totals = img_cube_stack.sum(axis=(1, 2))
-        cube_totals = cube_totals.compute()
-        cube_means = cube_totals / 2080.0 ** 2
+        # img_cube = self.get_img_section(0, Settings.channel_to_use)
+        # img_cube_stack = da.stack(img_cube)
+        # # ref image is the one with the max integrated flux
+        # cube_totals = img_cube_stack.sum(axis=(1, 2))
+        # cube_totals = cube_totals.compute()
+        # cube_means = cube_totals / 2080.0 ** 2
 
-        absolute_ref_img = cube_means.argmax()
+        # absolute_ref_img = cube_means.argmax()
+        absolute_ref_img = self.absolute_ref_img
 
         if self.offset_mode == "default":
             dx = np.array(self["XPos"])
@@ -663,22 +708,42 @@ class Section:
         px_y_temp = []
         mu_x_temp = []
         mu_y_temp = []
+        avg_f_temp = []
         for this_key in self._px.keys():
             px_x_temp.append(self._px[this_key][0])
             px_y_temp.append(self._px[this_key][1])
             mu_x_temp.append(self._mu[this_key][0] / scale_x)
             mu_y_temp.append(self._mu[this_key][1] / scale_y)
+            avg_f_temp.append(self._avg[this_key])
         px_x_temp = np.array(px_x_temp)
         px_y_temp = np.array(px_y_temp)
         mu_x_temp = np.array(mu_x_temp)
         mu_y_temp = np.array(mu_y_temp)
+        avg_f_temp = np.array(avg_f_temp)
 
-        ind_temp = np.where(np.abs(px_x_temp) > np.mean(np.abs(px_x_temp)))[0]
-        elongx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
-        eshorty = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
-        ind_temp = np.where(np.abs(px_y_temp) > np.mean(np.abs(px_y_temp)))[0]
-        elongy = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
-        eshortx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
+        ind_temp = np.where(
+            (np.abs(px_x_temp) > np.mean(np.abs(px_x_temp))) &
+            (avg_f_temp > 0.05)
+        )[0]
+        if len(ind_temp) > 3:
+            elongx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
+            eshorty = 1.48 * \
+                mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
+        else:
+            elongx = 10
+            eshorty = 10
+
+        ind_temp = np.where(
+            (np.abs(px_y_temp) > np.mean(np.abs(px_y_temp))) &
+            (avg_f_temp > 0.05)
+        )[0]
+        if len(ind_temp) > 3:
+            elongy = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
+            eshortx = 1.48 * \
+                mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
+        else:
+            elongy = 10.
+            eshortx = 10.
 
         error_long_threshold = 3.0 * np.max([elongx, elongy]).clip(2, 30)
         error_short_threshold = 3.0 * np.max([eshortx, eshorty]).clip(2, 30)
@@ -690,7 +755,7 @@ class Section:
 
         accumulated_pos = []
         accumulated_qual = []
-        for this_ref in np.where(cube_means > np.median(cube_means))[0]:
+        for this_ref in np.where(self.cube_means > np.median(self.cube_means))[0]:
 
             temp = self.compute_abspos_ref(
                 dx0,
@@ -819,13 +884,14 @@ class Section:
         return metadata
 
     def _stage_size(self, abs_pos):
+        # 20200717 increased security padding to 1.5x2080
         shape_0 = (
             int(np.array(abs_pos[:, 0]).max() - np.array(abs_pos[:, 0]).min())
-            + self.shape[0]
+            + 1.5 * self.shape[0]
         )
         shape_1 = (
             int(np.array(abs_pos[:, 1]).max() - np.array(abs_pos[:, 1]).min())
-            + self.shape[1]
+            + 1.5 * self.shape[1]
         )
 
         # this has to be a multiple of the chunk size
