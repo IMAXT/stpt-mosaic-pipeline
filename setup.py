@@ -10,7 +10,7 @@ with open("HISTORY.rst") as history_file:
 
 requirements = [
     "dask>=2.26",
-    "distributed",
+    "distributed>=2.26",
     "imaxt-image",
     "zarr",
     "numpy",
