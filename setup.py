@@ -18,7 +18,7 @@ requirements = [
     "scipy",
     "voluptuous",
     "xarray",
-    "opencv-python",
+    "opencv-python==4.2.*",
     "owl-pipeline-develop",
     "scikit-image",
 ]
