@@ -112,9 +112,13 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
                 im = arr.sel(tile=i, channel=j) / Settings.norm_val
 
                 n = int(j.values)
+                if n >= len(dark):
+                    logger.warning("No appropriate dark and flat for this channel")
+                    n = -1
 
                 d = dark[n] / Settings.norm_val
                 f = flat[n]
+
                 img = apply_geometric_transform(im.sel(z=k).data, d, f, cof_dist)
                 channels.append([img])
 
