@@ -812,12 +812,7 @@ class Section:
                     mos = mos.rechunk((1040, 1040))
                     st = mos.to_zarr(nimg, compute=False, return_stored=False)
                     results.append(st)
-                futures = client.compute(results)
-                for fut in as_completed(futures):
-                    if fut.exception():
-                        logger.error(fut.exception())
-                        tb = fut.traceback()
-                        logger.error(traceback.format_tb(tb))
+                dask.compute(results)
                 logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
         return z
 

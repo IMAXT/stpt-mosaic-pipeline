@@ -160,7 +160,7 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
 
 
 def distort(
-    input: Path, dark_file: Path, flat_file: Path, output: Path, nparallel: int = 1
+    input: Path, dark_file: Path, flat_file: Path, output: Path
 ):
     """Apply optical distortion to dataset.
 
@@ -172,8 +172,6 @@ def distort(
         path to flatfield
     output
         name of output file
-    nparallel
-        number of sections to run in parallel
     """
     client = Client.current()
     logger.info("Preparing distorted dataset")
@@ -187,23 +185,8 @@ def distort(
     ds = xr.open_zarr(f"{input}")
     sections = list(ds)
 
-    j = nparallel if len(sections) > nparallel else len(sections)
     func = partial(
         _write_dataset, dark=dark, flat=flat, output=output, cof_dist=Settings.cof_dist
     )
-    futures = client.map(func, [ds[sections[n]] for n in range(j)])
-
-    seq = as_completed(futures)
-    for fut in seq:
-        if not fut.exception():
-            logger.info("Saved %s", fut.result())
-            fut.cancel()
-            if j < len(sections):
-                fut = client.submit(func, ds[sections[j]])
-                seq.add(fut)
-                j += 1
-        else:
-            logger.error("%s", fut.exception())
-            tb = fut.traceback()
-            logger.error(traceback.format_tb(tb))
-            raise
+    for j in sections:
+        res = func(ds[j])
