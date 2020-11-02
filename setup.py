@@ -9,7 +9,7 @@ with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
 requirements = [
-    "dask",
+    "dask>=2.26",
     "distributed",
     "imaxt-image",
     "zarr",
