@@ -33,12 +33,8 @@ def main(  # noqa: C901
     if cof_dist is not None:
         Settings.cof_dist = cof_dist
 
-    # TODO: Preprocessing to me moved outside the pipeline
-    out = output_dir_full / "raw.zarr"
-    if "preprocess" in recipes:
-        if not root_dir.exists():
-            raise FileNotFoundError(f"Directory {root_dir} does not exist.")
-        preprocess(root_dir, out)
+    if not root_dir.exists():
+        raise FileNotFoundError(f"Directory {root_dir} does not exist.")
 
     # TODO: compute dark and flat
 
