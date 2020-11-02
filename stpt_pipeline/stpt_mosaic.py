@@ -1,5 +1,4 @@
 import shutil
-import traceback
 from pathlib import Path
 from typing import List, Tuple
 
@@ -793,7 +792,6 @@ class Section:
 
     def _create_temporary_mosaic(self, conf, abs_pos, abs_err, output):
         logger.info("Creating temporary mosaic")
-        client = Client.current()
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         for sl in range(self.slices):

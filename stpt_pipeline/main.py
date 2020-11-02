@@ -6,7 +6,6 @@ import owl_dev.config
 from owl_dev.logging import logger
 
 from .geometric_distortion import distort
-from .preprocess import preprocess
 from .settings import Settings
 from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
@@ -27,7 +26,6 @@ def main(  # noqa: C901
     logger.info("Pipeline started")
 
     output_dir_full = output_dir / root_dir.name
-    #owl_dev.config.set({"output_dir": f"{output_dir_full}"})
     main.config["output_dir"] = f"{output_dir_full}"
     owl_dev.setup(main.config)
 

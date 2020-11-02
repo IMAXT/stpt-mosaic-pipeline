@@ -1,5 +1,4 @@
 import shutil
-import traceback
 from contextlib import suppress
 from functools import partial
 from pathlib import Path
@@ -9,7 +8,6 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 from dask import delayed
-from distributed import Client, as_completed
 from skimage.transform import warp
 
 from owl_dev.logging import logger
@@ -173,7 +171,6 @@ def distort(
     output
         name of output file
     """
-    client = Client.current()
     logger.info("Preparing distorted dataset")
     ds = xr.Dataset()
     ds.to_zarr(output, mode="w")
@@ -189,4 +186,4 @@ def distort(
         _write_dataset, dark=dark, flat=flat, output=output, cof_dist=Settings.cof_dist
     )
     for j in sections:
-        res = func(ds[j])
+        func(ds[j])
