@@ -28,7 +28,7 @@ An example pipeline definition file follows:
     output_dir: /data/meds1_b/processed/STPT
 
     # Recipes to run
-    recipes: ["preprocess", "distortion", "mosaic", "downsample", "tiff"]
+    recipes: ["distortion", "mosaic", "downsample", "beadreg"]
 
     # Resources requested
     resources:
@@ -64,9 +64,6 @@ Available recipes
 '''''''''''''''''
 
 +------------------------+----------------------------------------------------+
-| **preprocess**         | Read the input OME-TIFF files and writes the       |
-|                        | dataset in Zarr.                                   |
-+------------------------+----------------------------------------------------+
 | **distortion**         | Performs distortion correction as well as dark and |
 |                        | flatfield correction.                              |
 +------------------------+----------------------------------------------------+
@@ -75,7 +72,7 @@ Available recipes
 | **downsample**         | Downsamples the mosaic to various resolution       |
 |                        | levels.                                            |
 +------------------------+----------------------------------------------------+
-| **tiff**               | Converts mosaic from Zarr to TIFF                  |
+| **beadreg**            | Perform bead registration                          |
 +------------------------+----------------------------------------------------+
 
 
