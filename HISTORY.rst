@@ -2,6 +2,11 @@
 History
 =======
 
+0.5 (2020-11-02)
+----------------
+
+* Remove preprocess and update for new metadata representation
+
 
 0.4.4 (2020-06-19)
 ------------------
