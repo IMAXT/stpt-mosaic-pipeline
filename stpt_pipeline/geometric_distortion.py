@@ -143,7 +143,7 @@ def _write_dataset(arr, *, dark, flat, output, cof_dist):
 
         try:
             g.to_zarr(output, mode="a", group=f"G{arr.name}", append_dim="z")
-        except ValueError:
+        except (KeyError, ValueError):
             g.to_zarr(output, mode="a", group=f"G{arr.name}")
 
         del this
