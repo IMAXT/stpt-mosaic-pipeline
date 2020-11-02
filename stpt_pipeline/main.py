@@ -27,7 +27,8 @@ def main(  # noqa: C901
     logger.info("Pipeline started")
 
     output_dir_full = output_dir / root_dir.name
-    owl_dev.config.set({"output_dir": f"{output_dir_full}"})
+    #owl_dev.config.set({"output_dir": f"{output_dir_full}"})
+    main.config["output_dir"] = f"{output_dir_full}"
     owl_dev.setup(main.config)
 
     if cof_dist is not None:
@@ -41,9 +42,7 @@ def main(  # noqa: C901
     # Geometric distortion
     out_dis = output_dir_full / "dis.zarr"
     if "distortion" in recipes:
-        if not out.exists():
-            raise FileNotFoundError(f"Preprocessed data not found in {out}")
-        distort(out, Settings.dark_file, Settings.flat_file, out_dis)
+        distort(root_dir, Settings.dark_file, Settings.flat_file, out_dis)
 
     if not out_dis.exists():
         raise FileNotFoundError(f"Distortion corrected data not found in {out_dis}")
