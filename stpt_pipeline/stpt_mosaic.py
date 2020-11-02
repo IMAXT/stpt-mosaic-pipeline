@@ -93,7 +93,7 @@ class Section:
         self.stage_size = stage_size
 
     def __getitem__(self, attr):
-        res = self._section.attrs[attr]
+        res = self._section.attrs["raw_meta"][0][attr]
         if isinstance(res, str) and res.isnumeric():
             res = int(res)
         elif isinstance(res, str):
