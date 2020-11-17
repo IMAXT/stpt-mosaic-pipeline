@@ -799,6 +799,7 @@ class Section:
                 im_t = self.get_img_section(sl, ch)
                 g = z.create_group(
                     f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+                results = []
                 for imgtype in ["raw", "pos_err", "overlap"]:
                     res = _mosaic(
                         im_t, conf, abs_pos, abs_err, imgtype, out_shape=self.stage_size
@@ -807,7 +808,9 @@ class Section:
                         g, imgtype, self.stage_size, dtype="float32")
                     mos = da.from_delayed(res, self.stage_size, dtype="float32")
                     mos = mos.rechunk((1040, 1040))
-                    mos.to_zarr(nimg, return_stored=False)
+                    st = mos.to_zarr(nimg, compute=False, return_stored=False)
+                    results.append(st)
+                dask.compute(results)
                 logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
         return z
 
