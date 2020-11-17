@@ -51,7 +51,7 @@ def _get_image(group, imgtype, shape, dtype="float32"):
 
 
 @delayed
-def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None):
+def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None, out=None):
     assert out_shape is not None
     assert imgtype in ["raw", "pos_err", "overlap"]
     y_size, x_size = out_shape
@@ -74,6 +74,10 @@ def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None):
             big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf * np.sum(
                 np.array(abs_err) ** 2
             )
+
+    if out is not None:
+        out[:, :] = big_picture
+        return
 
     return big_picture
 
@@ -801,15 +805,12 @@ class Section:
                     f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
                 results = []
                 for imgtype in ["raw", "pos_err", "overlap"]:
+                    nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
                     res = _mosaic(
-                        im_t, conf, abs_pos, abs_err, imgtype, out_shape=self.stage_size
+                        im_t, conf, abs_pos, abs_err, imgtype,
+                        out_shape=self.stage_size, out=nimg
                     )
-                    nimg = _get_image(
-                        g, imgtype, self.stage_size, dtype="float32")
-                    mos = da.from_delayed(res, self.stage_size, dtype="float32")
-                    mos = mos.rechunk((1040, 1040))
-                    st = mos.to_zarr(nimg, compute=False, return_stored=False)
-                    results.append(st)
+                    results.append(res)
                 dask.compute(results)
                 logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
         return z
