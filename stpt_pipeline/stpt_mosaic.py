@@ -50,6 +50,32 @@ def _get_image(group, imgtype, shape, dtype="float32"):
     return arr
 
 
+def _mosaic2(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None):
+    assert out_shape is not None
+    assert imgtype in ["raw", "pos_err", "overlap"]
+    y_size, x_size = out_shape
+    y_delta, x_delta = np.min(abs_pos, axis=0)
+    logger.debug("Mosaic size: %dx%d", x_size, y_size)
+    big_picture = da.zeros((y_size, x_size), dtype="float32")
+
+    for i, im in enumerate(im_t):
+        y0 = int(abs_pos[i, 0] - y_delta)
+        x0 = int(abs_pos[i, 1] - x_delta)
+        yslice = slice(y0, y0 + im.shape[0])
+        xslice = slice(x0, x0 + im.shape[1])
+
+        if imgtype == "raw":
+            mos = im.data * conf
+            mos = da.pad(mos, ((yslice.start, ysize - yslice.stop), (xslice.start, xsize - xslice.stop)))
+            big_picture = big_picture + mos
+        elif imgtype == "overlap":
+            conf = da.pad(conf, ((yslice.start, ysize - yslice.stop), (xslice.start, xsize - xslice.stop)))
+            big_picture = big_picture + conf
+        elif imgtype == "pos_err":
+            conf = da.pad(conf, ((yslice.start, ysize - yslice.stop), (xslice.start, xsize - xslice.stop)))
+            big_picture = big_picture + conf * np.sum(np.array(abs_err) ** 2)
+
+
 @delayed
 def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None):
     assert out_shape is not None
@@ -800,12 +826,11 @@ class Section:
                 g = z.create_group(
                     f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
                 for imgtype in ["raw", "pos_err", "overlap"]:
-                    res = _mosaic(
+                    mos = _mosaic2(
                         im_t, conf, abs_pos, abs_err, imgtype, out_shape=self.stage_size
                     )
                     nimg = _get_image(
                         g, imgtype, self.stage_size, dtype="float32")
-                    mos = da.from_delayed(res, self.stage_size, dtype="float32")
                     mos = mos.rechunk((1040, 1040))
                     mos.to_zarr(nimg, return_stored=False)
                 logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
