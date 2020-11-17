@@ -808,9 +808,7 @@ class Section:
                         g, imgtype, self.stage_size, dtype="float32")
                     mos = da.from_delayed(res, self.stage_size, dtype="float32")
                     mos = mos.rechunk((1040, 1040))
-                    st = mos.to_zarr(nimg, compute=False, return_stored=False)
-                    results.append(st)
-                dask.compute(results)
+                    st = mos.to_zarr(nimg, return_stored=False)
                 logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
         return z
 
