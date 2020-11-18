@@ -172,6 +172,8 @@ def distort(
         name of output file
     """
     logger.info("Preparing distorted dataset")
+    shutil.rmtree(f"{output}", ignore_errors=True)
+
     ds = xr.Dataset()
     ds.to_zarr(output, mode="w")
 

@@ -935,6 +935,8 @@ class STPTMosaic:
 
     def initialize_storage(self, output: Path):
         logger.info("Preparing mosaic output")
+
+        shutil.rmtree(f"{output}/mos.zarr", ignore_errors=True)
         ds = xr.Dataset()
         ds.to_zarr(output / "mos.zarr", mode="w")
 
