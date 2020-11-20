@@ -66,7 +66,7 @@ def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None, out=None):
         xslice = slice(x0, x0 + im.shape[1])
 
         if imgtype == "raw":
-            mos = im.data * conf
+            mos = im * conf
             big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
         elif imgtype == "overlap":
             big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf
@@ -233,6 +233,12 @@ class Section:
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
 
+        flat = read_calib(Settings.flat_file)[Settings.channel_to_use - 1]
+        dark = read_calib(Settings.dark_file)[Settings.channel_to_use - 1]
+
+        flat = flat.persist()
+        dark = dark.persist()
+
         dx0, dy0, delta_x, delta_y = self.find_grid()
         dx_mos, dy_mos = self.get_mos_pos()
 
@@ -312,8 +318,14 @@ class Section:
                     sign = 1
 
                 if self.offset_mode == "sampled":
+                    im1 = apply_geometric_transform(
+                        im_ref.data, dark, flat, Settings.cof_dist
+                    )
+                    im2 = apply_geometric_transform(
+                        im_obj.data, dark, flat, Settings.cof_dist
+                    )
                     res = delayed(find_overlap_conf)(
-                        im_ref.data, im_obj.data, dist_conf, dist_conf, desp
+                        im1, im2, dist_conf, dist_conf, desp
                     )
                     results.append(_sink(ref_img, obj_img, res, sign))
 
@@ -798,17 +810,32 @@ class Section:
         logger.info("Creating temporary mosaic")
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
+        flat = read_calib(Settings.flat_file)
+        dark = read_calib(Settings.dark_file)
+        cof_dist = Settings.cof_dist
+
         for sl in range(self.slices):
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
-                g = z.create_group(
-                    f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+                g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+
+                im_dis = [
+                    apply_geometric_transform(im.data, dark[ch], flat[ch], cof_dist)
+                    for im in im_t
+                ]
+
                 results = []
                 for imgtype in ["raw", "pos_err", "overlap"]:
                     nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
+
                     res = _mosaic(
-                        im_t, conf, abs_pos, abs_err, imgtype,
-                        out_shape=self.stage_size, out=nimg
+                        im_dis,
+                        conf,
+                        abs_pos,
+                        abs_err,
+                        imgtype,
+                        out_shape=self.stage_size,
+                        out=nimg,
                     )
                     results.append(res)
                 dask.compute(results)

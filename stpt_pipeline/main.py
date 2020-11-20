@@ -5,7 +5,6 @@ import owl_dev
 import owl_dev.config
 from owl_dev.logging import logger
 
-from .geometric_distortion import distort
 from .settings import Settings
 from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
@@ -37,15 +36,7 @@ def main(  # noqa: C901
 
     # TODO: compute dark and flat
 
-    # Geometric distortion
-    out_dis = output_dir_full / "dis.zarr"
-    if "distortion" in recipes:
-        distort(root_dir, Settings.dark_file, Settings.flat_file, out_dis)
-
-    if not out_dis.exists():
-        raise FileNotFoundError(f"Distortion corrected data not found in {out_dis}")
-
-    mos = STPTMosaic(out_dis)
+    mos = STPTMosaic(root_dir)
     if "mosaic" in recipes:
         mos.initialize_storage(output_dir_full)
 
