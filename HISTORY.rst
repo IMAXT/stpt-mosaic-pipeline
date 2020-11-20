@@ -2,11 +2,16 @@
 History
 =======
 
+0.6 (2020-11-20)
+----------------
+
+* Distortion is now performed on the fly
+* Removed unused tiff recipe
+
 0.5 (2020-11-02)
 ----------------
 
 * Remove preprocess and update for new metadata representation
-
 
 0.4.4 (2020-06-19)
 ------------------
