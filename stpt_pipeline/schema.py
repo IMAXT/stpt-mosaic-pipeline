@@ -14,10 +14,7 @@ def check_recipes(val):
 
 # TODO: make sure they are lists of floats
 cof_dist_schema = vo.Schema(
-    {
-        vo.Required("cof_x"): list, vo.Required("cof_y"): list,
-        vo.Required("tan"): list
-    }
+    {vo.Required("cof_x"): list, vo.Required("cof_y"): list, vo.Required("tan"): list}
 )
 
 schema = vo.Schema(

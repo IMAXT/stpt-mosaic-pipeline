@@ -108,34 +108,29 @@ class Section:
 
     @property
     def path(self) -> str:
-        """Path of the section
-        """
+        """Path of the section"""
         return self._section.path
 
     @property
     def shape(self) -> Tuple[int, int]:
-        """Mosaic shape in rows and columns
-        """
+        """Mosaic shape in rows and columns"""
         ncols = len(self._section.x)
         nrows = len(self._section.y)
         return (nrows, ncols)
 
     @property
     def fovs(self) -> int:
-        """Number of field of views.
-        """
+        """Number of field of views."""
         return len(self._section.tile)
 
     @property
     def channels(self) -> int:
-        """Number of channels
-        """
+        """Number of channels"""
         return len(self._section.channel)
 
     @property
     def slices(self):
-        """Number of optical sections
-        """
+        """Number of optical sections"""
         return len(self._section.z)
 
     def get_img_section(self, offset: int, channel: int) -> xr.DataArray:
@@ -148,8 +143,7 @@ class Section:
                 if n == 0:
                     img_cube = self._section.sel(z=offset, channel=this_channel)
                 else:
-                    img_cube += self._section.sel(z=offset,
-                                                  channel=this_channel)
+                    img_cube += self._section.sel(z=offset, channel=this_channel)
                 n += 1.0
         else:
             img_cube = self._section.sel(z=offset, channel=channel)
@@ -220,8 +214,7 @@ class Section:
         return res.astype("uint8")
 
     def find_offsets(self):  # noqa: C901
-        """Calculate offsets between all pairs of overlapping images
-        """
+        """Calculate offsets between all pairs of overlapping images"""
         client = Client.current()
         # convert to find_shifts
         results = []
@@ -275,11 +268,7 @@ class Section:
             self.offset_mode = "default"
 
         if self.mean_ref_img < 0.05:
-            logger.info(
-                "Avg. flux too low: {0:.3f}<0.05".format(
-                    self.mean_ref_img
-                )
-            )
+            logger.info("Avg. flux too low: {0:.3f}<0.05".format(self.mean_ref_img))
             self.offset_mode = "default"
 
         for i, img in enumerate(img_cube):
@@ -381,8 +370,7 @@ class Section:
 
     @property
     def scale(self) -> Tuple[float]:
-        """Scale of the detector in pixels per micron
-        """
+        """Scale of the detector in pixels per micron"""
         # Mu to px scale
         # we remove null theoretical displacements, bad measurements and
         # the random measured jitter (dx<1000) as these are not supposed to happen,
@@ -417,8 +405,7 @@ class Section:
         return (x_scale, y_scale)
 
     def compute_pairs(self):
-        """Return the pairs of mags of the detector
-        """
+        """Return the pairs of mags of the detector"""
         offsets = self._offsets
         dx, dy = self["XPos"], self["YPos"]
 
@@ -473,10 +460,8 @@ class Section:
             & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -486,10 +471,8 @@ class Section:
             & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
-            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -566,8 +549,7 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0 *
-                                            default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -590,8 +572,7 @@ class Section:
                             )
 
                         else:
-                            default_desp = [-1.0 *
-                                            default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
@@ -620,29 +601,25 @@ class Section:
                     # that despite having overlaps, there seems to be no info
                     # and lead to nans
                     if (
-                        (err_long_px < error_long_threshold) &
-                        (err_short_px < error_short_threshold) &
-                        (self._mi[f"{ref_img}:{this_img}"] > 0) &
-                        (self._avg[f"{ref_img}:{this_img}"] > 0.05)
+                        (err_long_px < error_long_threshold)
+                        & (err_short_px < error_short_threshold)
+                        & (self._mi[f"{ref_img}:{this_img}"] > 0)
+                        & (self._avg[f"{ref_img}:{this_img}"] > 0.05)
                     ):
                         # Dimensions in the mosaic and images have opposite directions
                         temp_pos[0].append(
-                            abs_pos[ref_img, 0] +
-                            self._px[f"{ref_img}:{this_img}"][0]
+                            abs_pos[ref_img, 0] + self._px[f"{ref_img}:{this_img}"][0]
                         )
                         temp_pos[1].append(
-                            abs_pos[ref_img, 1] +
-                            self._px[f"{ref_img}:{this_img}"][1]
+                            abs_pos[ref_img, 1] + self._px[f"{ref_img}:{this_img}"][1]
                         )
                         # weights
                         weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
                         temp_qual.append(pos_quality[ref_img])
                         prov_im.append(ref_img)
                     else:
-                        temp_pos[0].append(
-                            abs_pos[ref_img, 0] + default_desp[0])
-                        temp_pos[1].append(
-                            abs_pos[ref_img, 1] + default_desp[1])
+                        temp_pos[0].append(abs_pos[ref_img, 0] + default_desp[0])
+                        temp_pos[1].append(abs_pos[ref_img, 1] + default_desp[1])
                         weight.append(0.0000001 ** 2)  # artificially low weight
                         temp_qual.append(0.0)
                         prov_im.append(-1.0 * ref_img)
@@ -650,12 +627,10 @@ class Section:
                 weight = np.array(weight)
 
                 abs_pos[this_img, 0] = int(
-                    np.round(
-                        (np.array(temp_pos[0]) * weight).sum() / weight.sum())
+                    np.round((np.array(temp_pos[0]) * weight).sum() / weight.sum())
                 )
                 abs_pos[this_img, 1] = int(
-                    np.round(
-                        (np.array(temp_pos[1]) * weight).sum() / weight.sum())
+                    np.round((np.array(temp_pos[1]) * weight).sum() / weight.sum())
                 )
 
                 # this image has been fixed
@@ -667,8 +642,7 @@ class Section:
         return abs_pos, pos_quality
 
     def compute_abspos(self):  # noqa: C901
-        """Compute absolute positions of images in the field of view.
-        """
+        """Compute absolute positions of images in the field of view."""
         logger.info("Processing section %s", self._section.name)
 
         # img_cube = self.get_img_section(0, Settings.channel_to_use)
@@ -737,28 +711,24 @@ class Section:
         avg_f_temp = np.array(avg_f_temp)
 
         ind_temp = np.where(
-            (np.abs(px_x_temp) > np.mean(np.abs(px_x_temp))) &
-            (avg_f_temp > 0.05)
+            (np.abs(px_x_temp) > np.mean(np.abs(px_x_temp))) & (avg_f_temp > 0.05)
         )[0]
         if len(ind_temp) > 3:
             elongx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
-            eshorty = 1.48 * \
-                mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
+            eshorty = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
         else:
             elongx = 10
             eshorty = 10
 
         ind_temp = np.where(
-            (np.abs(px_y_temp) > np.mean(np.abs(px_y_temp))) &
-            (avg_f_temp > 0.05)
+            (np.abs(px_y_temp) > np.mean(np.abs(px_y_temp))) & (avg_f_temp > 0.05)
         )[0]
         if len(ind_temp) > 3:
             elongy = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
-            eshortx = 1.48 * \
-                mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
+            eshortx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
         else:
-            elongy = 10.
-            eshortx = 10.
+            elongy = 10.0
+            eshortx = 10.0
 
         error_long_threshold = 3.0 * np.max([elongx, elongy]).clip(2, 30)
         error_short_threshold = 3.0 * np.max([eshortx, eshorty]).clip(2, 30)
@@ -792,8 +762,7 @@ class Section:
             # adding quality of global reference
             accumulated_qual.append(
                 np.sqrt(
-                    np.array(temp[1]) ** 2 +
-                    np.array(temp[1])[absolute_ref_img] ** 2
+                    np.array(temp[1]) ** 2 + np.array(temp[1])[absolute_ref_img] ** 2
                 )
             )
 
@@ -858,13 +827,11 @@ class Section:
 
             raw = (raw - Settings.bzero) / Settings.bscale
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"])
-                          for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
                 * 100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"])
-                          for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
                 * 100
             )
             mos_overlap.append(overlap)
@@ -926,8 +893,7 @@ class Section:
         return (shape_0, shape_1)
 
     def stitch(self, output: Path):
-        """Stitch and save all images
-        """
+        """Stitch and save all images"""
         abs_pos, abs_err = self.compute_abspos()
         conf = self.get_distconf()
 
@@ -963,13 +929,11 @@ class STPTMosaic:
     def initialize_storage(self, output: Path):
         logger.info("Preparing mosaic output")
 
-        shutil.rmtree(f"{output}/mos.zarr", ignore_errors=True)
         ds = xr.Dataset()
         ds.to_zarr(output / "mos.zarr", mode="w")
 
     def sections(self):
-        """Sections generator
-        """
+        """Sections generator"""
         for section in self._ds:
             yield Section(self._ds[section], self.stage_size)
 
