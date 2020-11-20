@@ -1,23 +1,23 @@
 from pathlib import Path
 
+import dask
 import dask.array as da
 import numpy as np
+import scipy.ndimage as ndi
 import xarray as xr
-from dask import compute, delayed
-from scipy.ndimage import distance_transform_edt, label, zoom
+import zarr
+from dask import delayed
+from owl_dev.logging import logger
 from scipy.optimize import minimize
 from scipy.stats import median_absolute_deviation as mad
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
-import zarr
-from owl_dev.logging import logger
-
 from .bead_model import neg_log_like_conf
 from .settings import Settings
 
 
-@delayed
+@delayed(nout=4)
 def _get_coords(lab_im, lab_num, size_lim):
     cx, cy = np.where(lab_im == lab_num)
 
@@ -28,37 +28,18 @@ def _get_coords(lab_im, lab_num, size_lim):
     return cx, cy, lab_num, good_bead
 
 
-def det_features(im, pedestal, im_std):
-    """
-        Searchs for continous pathces of pixels over the detection threshold.
-        Then calculates the bounding box for each patch and excludes those
-        that are too big or too small.
-
-        Parameters
-        ----------
-        im: image with features to be detected
-        pedestal: bacckgorund level to substract
-        im_std: representative standard deviation of the image
-
-        Returns
-        -------
-        labels: an array, the same size as im, with the labels for
-            each detected object
-        good_objects: the ids of the objects that passed the preliminary
-            filter in size
-        good_cx, good_cy: centre-of-mass coordinates of the objets
-    """
+@delayed
+def _get_labels(im, pedestal, im_std):
 
     clean_im = (im - pedestal).clip(0, 1e6)
 
     # this will be used to distinguish sample chunks from beads
-    max_bead_area = (2. * Settings.feature_size[1] / Settings.zoom_level)**2
+    max_bead_area = (2.0 * Settings.feature_size[1] / Settings.zoom_level) ** 2
 
     # this first pass only detects the sample, which is the largest
     # object
 
-    labels, n_objs = label(
-        clean_im > Settings.sample_detection_threshold * im_std)
+    labels, n_objs = ndi.label(clean_im > Settings.sample_detection_threshold * im_std)
     sample_size = 0
     sample_label = []
     for i in range(1, n_objs):
@@ -72,18 +53,44 @@ def det_features(im, pedestal, im_std):
     for i in sample_label:
         mask[(labels == i)] = 0
 
-    labels, n_objs = label(
-        clean_im * mask > Settings.bead_detection_threshold * im_std)
+    labels, n_objs = ndi.label(
+        clean_im * mask > Settings.bead_detection_threshold * im_std
+    )
 
     # Watershed segmentation for beads that are touching
     im_temp = (labels > 0).astype(float)
-    distance = distance_transform_edt(im_temp)
+    distance = ndi.distance_transform_edt(im_temp)
     local_maxi = peak_local_max(
         distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp
     )
-    marks = label(local_maxi)[0]
+    marks = ndi.label(local_maxi)[0]
     labels = watershed(-distance, marks, mask=im_temp)
 
+    return labels
+
+
+def det_features(im, pedestal, im_std):
+    """
+    Searchs for continous pathces of pixels over the detection threshold.
+    Then calculates the bounding box for each patch and excludes those
+    that are too big or too small.
+
+    Parameters
+    ----------
+    im: image with features to be detected
+    pedestal: bacckgorund level to substract
+    im_std: representative standard deviation of the image
+
+    Returns
+    -------
+    labels: an array, the same size as im, with the labels for
+        each detected object
+    good_objects: the ids of the objects that passed the preliminary
+        filter in size
+    good_cx, good_cy: centre-of-mass coordinates of the objets
+    """
+
+    labels = _get_labels(im, pedestal, im_std).compute()
     da_labels = da.from_array(labels)
 
     bead_limits = [
@@ -95,7 +102,7 @@ def det_features(im, pedestal, im_std):
     for this_object in range(1, np.max(labels) + 1):
         res.append(_get_coords(da_labels, this_object, bead_limits))
 
-    beads = compute(res)
+    beads = dask.compute(res)
 
     good_objects = []
     good_cx = []
@@ -111,16 +118,16 @@ def det_features(im, pedestal, im_std):
 
 def mass_center(im, mask):
     """
-        Gets the center-of-mass of an image weigthing pxs with brightness.
+    Gets the center-of-mass of an image weigthing pxs with brightness.
 
-        Parameters
-        ----------
-        im: image with features to be detected
-        mask: a 1/0 mask of pixels to be left out
+    Parameters
+    ----------
+    im: image with features to be detected
+    mask: a 1/0 mask of pixels to be left out
 
-        Returns
-        -------
-        x_c,y_c: position of the COM in image coordinates (x along columns)
+    Returns
+    -------
+    x_c,y_c: position of the COM in image coordinates (x along columns)
     """
     x = np.arange(im.shape[0])
     y = np.arange(im.shape[1])
@@ -134,8 +141,8 @@ def mass_center(im, mask):
 @delayed
 def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
     """
-        Does the 1st fit to the bead profile,
-        using the downsampled image
+    Does the 1st fit to the bead profile,
+    using the downsampled image
     """
     # The first iteration of the bead centre is the candidate pixel
     x_t = np.mean(xc)
@@ -161,9 +168,8 @@ def _fit_bead_1stpass(im, labels, xc, yc, pedestal, im_std, bead_num):
             int(np.min([im.shape[1], y_t + 0.5 * feature_size[1]])),
         ]
 
-        im_t = im[ll_corner[0]: ur_corner[0],
-                  ll_corner[1]: ur_corner[1]] - pedestal
-        label_t = labels[ll_corner[0]: ur_corner[0], ll_corner[1]: ur_corner[1]]
+        im_t = im[ll_corner[0] : ur_corner[0], ll_corner[1] : ur_corner[1]] - pedestal
+        label_t = labels[ll_corner[0] : ur_corner[0], ll_corner[1] : ur_corner[1]]
         mask_t = label_t == bead_num
 
         if (im_t * mask_t).sum() == 0.0:
@@ -236,7 +242,7 @@ def get_cutout(im, ll_corner, width):
     ]
 
     # these are the full images that come as a zarr pointer
-    im_t = im[ll_corner[0]: ur_corner[0], ll_corner[1]: ur_corner[1]]
+    im_t = im[ll_corner[0] : ur_corner[0], ll_corner[1] : ur_corner[1]]
 
     return im_t
 
@@ -252,7 +258,7 @@ def _fit_bead_2ndpass(
     bead_num,
 ):
     """
-        Does the final fit over the full res image
+    Does the final fit over the full res image
     """
     cen_x = estimated_pars[0] * Settings.zoom_level
     cen_y = estimated_pars[1] * Settings.zoom_level
@@ -287,8 +293,7 @@ def _fit_bead_2ndpass(
     # brighter pixels dominate the fit, therefore contribute
     # more to the error
     temp = da.sqrt(err_t / conf_t.clip(1, 1e6))
-    err_bead = da.sum(temp * (im_t - pedestal) ** 2) / \
-        da.sum((im_t - pedestal) ** 2)
+    err_bead = da.sum(temp * (im_t - pedestal) ** 2) / da.sum((im_t - pedestal) ** 2)
 
     theta = [
         cen_x,
@@ -298,8 +303,7 @@ def _fit_bead_2ndpass(
         estimated_pars[5],
     ]
 
-    res = delayed(fit_bead)(im_t, label_t, theta,
-                            pedestal, im_std, bead_num, ll_corner)
+    res = delayed(fit_bead)(im_t, label_t, theta, pedestal, im_std, bead_num, ll_corner)
 
     return res, err_bead
 
@@ -308,32 +312,32 @@ def fit_bead(
     im, label, theta, pedestal, im_std, bead_label, corner, simple_result=False
 ):
     """
-        Does the final fit to the bead profile at full resolution.
-        theta has to be a good estimation of the bead parameters,
-        ideally from _fit_bead_1stpass
+    Does the final fit to the bead profile at full resolution.
+    theta has to be a good estimation of the bead parameters,
+    ideally from _fit_bead_1stpass
 
-        Parameters
-        ----------
-        im: image with the flux pixel values
-        err: positional error, can be an image of the same size
-            as im
-        conf: the confidence map associated with im
-        label: object labeling of the pixels in im
-        theta: 1st estimation of the bead profile to be fit
-        pedestal, im_std: background level and std of the image
-        bead_label: object label of the bead to be fit, in case
-            there are other features in the image, these will be
-            flagged to 0
-        corner: absolute coordinates of the upper left corner of
-            the image, so that the output center is in abs. coords.
-        simple_result: if on, just outputs the fit theta, without
-            calculating other derivated parameters
+    Parameters
+    ----------
+    im: image with the flux pixel values
+    err: positional error, can be an image of the same size
+        as im
+    conf: the confidence map associated with im
+    label: object labeling of the pixels in im
+    theta: 1st estimation of the bead profile to be fit
+    pedestal, im_std: background level and std of the image
+    bead_label: object label of the bead to be fit, in case
+        there are other features in the image, these will be
+        flagged to 0
+    corner: absolute coordinates of the upper left corner of
+        the image, so that the output center is in abs. coords.
+    simple_result: if on, just outputs the fit theta, without
+        calculating other derivated parameters
 
-        Returns
-        -------
-        Either the fitted parameters if simple_results is on, or a dictionary
-        with the bead centre in absolute coordinates, the total radius, the convergence
-        from optimize, the fit parameters and the estimated centering error
+    Returns
+    -------
+    Either the fitted parameters if simple_results is on, or a dictionary
+    with the bead centre in absolute coordinates, the total radius, the convergence
+    from optimize, the fit parameters and the estimated centering error
     """
     cen_x, cen_y, peak, width, exp = theta
 
@@ -382,10 +386,10 @@ def fit_bead(
 
 class bead_collection:
     """
-        This holds all the beads from all the slices of a mosaic,
-        and keeps track of which ones are the same bead at different
-        Z and which are new beads. Average coordinates per bead can be
-        updated.
+    This holds all the beads from all the slices of a mosaic,
+    and keeps track of which ones are the same bead at different
+    Z and which are new beads. Average coordinates per bead can be
+    updated.
     """
 
     def __init__(self):
@@ -463,12 +467,21 @@ def _check_bead(this_bead, done_x, done_y, full_shape):
         return False
 
 
+@delayed(nout=2)
+def image_stats(im, conf):
+    mask = conf > 0
+    pedestal = np.median(im[mask])
+    im_std = 1.48 * mad(im[mask], axis=None)
+    logger.debug("Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
+    return pedestal, im_std
+
+
 def find_beads(mos_zarr: Path):  # noqa: C901
     """
-        Finds all the beads in all the slices (physical and optical) in the
-        zarr, and fits the bead profile.
+    Finds all the beads in all the slices (physical and optical) in the
+    zarr, and fits the bead profile.
 
-        Attaches all the bead info as attrs to the zarr
+    Attaches all the bead info as attrs to the zarr
     """
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
@@ -488,24 +501,19 @@ def find_beads(mos_zarr: Path):  # noqa: C901
     }
 
     mos_full = xr.open_zarr(f"{mos_zarr}", group="")
-    mos_zoom = xr.open_zarr(
-        f"{mos_zarr}", group="l.{0:d}".format(Settings.zoom_level))
+    mos_zoom = xr.open_zarr(f"{mos_zarr}", group=f"l.{Settings.zoom_level}")
 
-    slices = list(mos_full)
+    full_shape = (mos_full.dims["y"], mos_full.dims["x"])
 
-    full_shape = (mos_full.y.shape[0], mos_full.x.shape[0])
-
-    for this_slice in slices:
-        optical_slices = list(mos_full[slices[0]].z.values)
+    for this_slice in list(mos_zoom):
 
         first_bead = True
         bead_cat = {}
 
-        for this_optical in optical_slices:
+        for this_optical in list(mos_full.z.values):
 
             logger.info(
-                "Analysing beads in " + this_slice +
-                " Z{0:03d}".format(this_optical)
+                "Analysing beads in " + this_slice + " Z{0:03d}".format(this_optical)
             )
 
             im = mos_zoom[this_slice].sel(
@@ -517,19 +525,15 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             )
 
             # Img stats
-            ix, iy = np.where(conf.values > 0)
-            pedestal = np.median(im.values[ix, iy])
-            im_std = 1.48 * mad(im.values[ix, iy], axis=None)
-            logger.debug(
-                "Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
+            pedestal, im_std = image_stats(im.data, conf.data).compute()
 
             # Detection of all features with bead size
             labels, good_objects, good_cx, good_cy = det_features(
-                im.values, pedestal, im_std
+                im.data, pedestal, im_std
             )
+            da_labels = da.from_array(labels).persist()
 
-            logger.debug(
-                "Found {0:d} preliminary beads".format(len(good_objects)))
+            logger.debug("Found {0:d} preliminary beads".format(len(good_objects)))
 
             logger.debug("Filtering preliminary detections")
 
@@ -538,7 +542,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 temp.append(
                     _fit_bead_1stpass(
                         im.data,
-                        labels,
+                        da_labels,
                         good_cx[i],
                         good_cy[i],
                         pedestal,
@@ -546,12 +550,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                         good_objects[i],
                     )
                 )
-            beads_1st_iter = compute(temp)[0]
+            beads_1st_iter = dask.compute(temp)[0]
+            logger.debug('First pass completed')
 
             # resampling to full arr
-            full_labels = delayed(zoom)(labels, Settings.zoom_level, order=0)
-            full_labels = da.from_delayed(
-                full_labels, shape=full_shape, dtype="int")
+            full_labels = delayed(ndi.zoom)(labels, Settings.zoom_level, order=0)
+            full_labels = da.from_delayed(full_labels, shape=full_shape, dtype="int")
 
             full_im = (
                 mos_full[this_slice]
@@ -594,7 +598,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                         good_objects[i],
                     )
                 )
-            all_beads = compute(temp)[0]
+            all_beads = dask.compute(temp)[0]
 
             # now we store all good beads in a dictionary, removing
             # duplicates and bad fits
@@ -634,7 +638,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
 def _get_beads(slice_obj, z_val):
 
-    if 'bead_z' in list(slice_obj.keys()):
+    if "bead_z" in list(slice_obj.keys()):
 
         z = np.array(slice_obj["bead_z"][:])
         i_t = np.where(z == z_val)[0]
@@ -683,8 +687,7 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         e_c = np.sqrt(el[i_ls] ** 2 + es[i_sl] ** 2).clip(2)
 
         # only 3sigma matches
-        ii = np.where(r_sl - np.median(r_sl) < 3.0 *
-                      1.48 * mad(r_sl, axis=None))[0]
+        ii = np.where(r_sl - np.median(r_sl) < 3.0 * 1.48 * mad(r_sl, axis=None))[0]
 
         dx = np.sum((xl[i_ls] - xs[i_sl])[ii] / e_c[ii] ** 2) / np.sum(
             1.0 / e_c[ii] ** 2
@@ -731,9 +734,9 @@ def _get_good_beads(mos_full, phys, opt, good_beads):
 
 def register_slices(mos_zarr: Path):  # noqa: C901
     """
-        Uses all the detected beads in each slice to cross-match
-        and calculates an average displacement so that all
-        slices are matched to the first one
+    Uses all the detected beads in each slice to cross-match
+    and calculates an average displacement so that all
+    slices are matched to the first one
     """
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
@@ -771,11 +774,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             dy.append(dyt)
 
             dr = np.sqrt(
-                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 + (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
             )
-            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                          (x_r[i_rt] - x_t[i_tr]) ** 2)
+            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 + (x_r[i_rt] - x_t[i_tr]) ** 2)
 
             logger.info(
                 physical_slices[i - 1]
@@ -809,8 +810,8 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
         # because dx,dy are slice to slice, the total displacement
         # is the sum of all the previous
-        dx_t = np.sum(dx[0: i + 1])
-        dy_t = np.sum(dy[0: i + 1])
+        dx_t = np.sum(dx[0 : i + 1])
+        dy_t = np.sum(dy[0 : i + 1])
 
         ind_r, x_r, y_r, _, _ = _get_beads(
             mos_full[physical_slices[i]].attrs, optical_slices[i]
@@ -846,8 +847,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     logger.info("2nd pass slice shifts")
     for i in range(1, len(physical_slices)):
         this_slice = physical_slices[i] + "_Z{0:03d}".format(optical_slices[i])
-        ref_slice = physical_slices[i - 1] + \
-            "_Z{0:03d}".format(optical_slices[i - 1])
+        ref_slice = physical_slices[i - 1] + "_Z{0:03d}".format(optical_slices[i - 1])
 
         # only beads that have high reps
         _, x_t, y_t, e_t = _get_good_beads(
@@ -856,8 +856,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
         if len(x_t) > 0:
             _, x_r, y_r, e_r = _get_good_beads(
-                mos_full, physical_slices[i -
-                                          1], optical_slices[i - 1], good_beads
+                mos_full, physical_slices[i - 1], optical_slices[i - 1], good_beads
             )
 
             dxt, dyt, edt, i_rt, i_tr = _match_cats(
@@ -869,11 +868,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             dd2.append(edt)
 
             dr = np.sqrt(
-                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 + (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
             )
-            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                          (x_r[i_rt] - x_t[i_tr]) ** 2)
+            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 + (x_r[i_rt] - x_t[i_tr]) ** 2)
             logger.info(
                 ref_slice
                 + ":"
@@ -914,9 +911,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
         # because dx,dy are slice to slice, the total displacement
         # is the sum of all the previous
-        dx_t = np.sum(dx2[0: i + 1])
-        dy_t = np.sum(dy2[0: i + 1])
-        de_t = np.sqrt(np.sum(np.array(dd2[0: i + 1]) ** 2))
+        dx_t = np.sum(dx2[0 : i + 1])
+        dy_t = np.sum(dy2[0 : i + 1])
+        de_t = np.sqrt(np.sum(np.array(dd2[0 : i + 1]) ** 2))
 
         cube_reg["abs_dx"].append(dx_t)
         cube_reg["abs_dy"].append(dy_t)
