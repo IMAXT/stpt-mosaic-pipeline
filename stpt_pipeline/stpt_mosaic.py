@@ -12,7 +12,6 @@ from distributed import Client, as_completed
 from scipy.stats import median_absolute_deviation as mad
 
 import zarr
-from imaxt_image.external.tifffile import TiffWriter
 from imaxt_image.registration import find_overlap_conf
 from owl_dev.logging import logger
 
@@ -25,18 +24,6 @@ from .settings import Settings
 @delayed
 def _sink(*args):
     return args
-
-
-@delayed
-def arr2tiff(output, arr, scl):
-    ch = str(arr.channel.values)
-    z = str(arr.z.values)
-    p = Path(f"{output}/tiff/mos{scl}/")
-    p.mkdir(exist_ok=True, parents=True)
-    filename = p / f"{output.name}-{arr.name}-z{z}-ch{ch}.tif"
-    with TiffWriter(f"{filename}") as writer:
-        writer.save(arr.astype("uint16"), compress=6)
-    return filename
 
 
 @retry(Exception)
@@ -979,30 +966,3 @@ class STPTMosaic:
         }
         arr.attrs["bscale"] = Settings.bscale
         arr.attrs["bzero"] = Settings.bzero
-
-    def to_tiff(self, output: Path, scales: List[int] = None):
-        """Export mosaic to TIFF format.
-
-        Parameters
-        ----------
-        output
-            Location of output directory
-        scales
-            List of scales to produce. Default is
-            [16, 8, 4, 2, 1]
-        """
-        if scales is None:
-            scales = [16, 8, 4, 2, 1]
-        for scl in scales:
-            arr = f"{output}/mos.zarr"
-            ds = xr.open_zarr(arr, group=f"l.{scl}")
-            files = []
-            for section in list(ds):
-                files = []
-                for ch in list(ds.channel):
-                    for z in list(ds.z):
-                        im = ds[section].sel(type="mosaic", channel=ch, z=z)
-                        res = arr2tiff(output, im, scl)
-                        files.append(res)
-                for tfile in dask.compute(files)[0]:
-                    logger.info("Written %s", tfile)

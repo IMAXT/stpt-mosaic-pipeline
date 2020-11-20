@@ -50,9 +50,6 @@ def main(  # noqa: C901
     if "downsample" in recipes:
         mos.downsample(output_dir_full)
 
-    if "tiff" in recipes:
-        mos.to_tiff(output_dir_full)
-
     mos_dis = output_dir_full / "mos.zarr"
     if "beadreg" in recipes:
         find_beads(mos_dis)

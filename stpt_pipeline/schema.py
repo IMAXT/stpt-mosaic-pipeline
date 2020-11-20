@@ -2,7 +2,7 @@ from pathlib import Path
 
 import voluptuous as vo
 
-DEFAULT_RECIPES = ["mosaic", "downsample", "tiff", "beadreg"]
+DEFAULT_RECIPES = ["mosaic", "downsample", "beadreg"]
 
 
 def check_recipes(val):
