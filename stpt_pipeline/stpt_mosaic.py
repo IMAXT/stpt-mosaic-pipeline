@@ -855,6 +855,7 @@ class Section:
             "offsets": self._offsets,
             "scale": [self._x_scale, self._y_scale],
             "offset_mode": self.offset_mode,
+            "raw_meta": self._section.attrs.get("raw_meta"),
         }
         return metadata
 
@@ -917,6 +918,7 @@ class STPTMosaic:
         logger.info("Preparing mosaic output")
 
         ds = xr.Dataset()
+        ds.attrs = self._ds.attrs
         ds.to_zarr(output / "mos.zarr", mode="w")
 
     def sections(self):
