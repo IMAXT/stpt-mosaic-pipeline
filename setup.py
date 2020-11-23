@@ -54,7 +54,7 @@ setup(
     test_suite="tests",
     tests_require=test_requirements,
     url="https://gitlab.ast.cam.ac.uk/imaxt/stpt_pipeline",
-    version="0.6.0",
+    version="0.6.1",
     zip_safe=False,
     dependency_links=[
         "https://imaxt.ast.cam.ac.uk/pip/imaxt-image",

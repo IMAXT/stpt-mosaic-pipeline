@@ -2,9 +2,10 @@
 History
 =======
 
-0.6 (2020-11-20)
+0.6 (2020-11-24)
 ----------------
 
+* Fixed bead registration in Dask
 * Distortion is now performed on the fly
 * Removed unused tiff recipe
 
