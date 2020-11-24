@@ -213,7 +213,10 @@ class Section:
         dist_conf = self.get_distconf()
 
         flat = read_calib(Settings.flat_file)[Settings.channel_to_use - 1]
-        dark = read_calib(Settings.dark_file)[Settings.channel_to_use - 1]
+        dark = (
+            read_calib(Settings.dark_file)[Settings.channel_to_use - 1]
+            / Settings.norm_val
+        )
 
         flat = flat.persist()
         dark = dark.persist()
@@ -294,10 +297,10 @@ class Section:
 
                 if self.offset_mode == "sampled":
                     im1 = apply_geometric_transform(
-                        im_ref.data, dark, flat, Settings.cof_dist
+                        im_ref.data / Settings.norm_val, dark, flat, Settings.cof_dist
                     )
                     im2 = apply_geometric_transform(
-                        im_obj.data, dark, flat, Settings.cof_dist
+                        im_obj.data / Settings.norm_val, dark, flat, Settings.cof_dist
                     )
                     res = delayed(find_overlap_conf)(
                         im1, im2, dist_conf, dist_conf, desp
@@ -766,7 +769,7 @@ class Section:
         z = zarr.open(f"{output}/temp.zarr", mode="w")
 
         flat = read_calib(Settings.flat_file)
-        dark = read_calib(Settings.dark_file)
+        dark = read_calib(Settings.dark_file) / Settings.norm_val
         cof_dist = Settings.cof_dist
 
         for sl in range(self.slices):
@@ -775,7 +778,9 @@ class Section:
                 g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
 
                 im_dis = [
-                    apply_geometric_transform(im.data, dark[ch], flat[ch], cof_dist)
+                    apply_geometric_transform(
+                        im.data / Settings.norm_val, dark[ch], flat[ch], cof_dist
+                    )
                     for im in im_t
                 ]
 
