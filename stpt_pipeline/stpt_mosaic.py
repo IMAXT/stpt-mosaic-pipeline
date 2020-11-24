@@ -29,7 +29,7 @@ def _sink(*args):
 def _get_image(group, imgtype, shape, dtype="float32"):
     try:
         arr = group.create_dataset(
-            imgtype, shape=shape, chunks=(1040, 1040), dtype=dtype
+            imgtype, shape=shape, chunks=(4160, 4160), dtype=dtype
         )
     except ValueError:
         arr = group[imgtype]
@@ -831,7 +831,7 @@ class Section:
         mos_raw = da.stack(mos_raw)
         mos_overlap = da.stack(mos_overlap)
         mos_err = da.stack(mos_err)
-        mos = da.stack([mos_raw, mos_overlap, mos_err])
+        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 1, 1040, 1040))
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(
