@@ -791,16 +791,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             dx.append(0.0)
             dy.append(0.0)
 
-            logger.info(
-                physical_slices[i - 1]
-                + "_Z{0:03d}:".format(optical_slices[i - 1])
-                + physical_slices[i]
-                + "_Z{0:03d}:".format(optical_slices[i])
-                + " {0:d} ".format(len(i_tr))
-                + "{0:.1f} {1:.1f} ".format(dxt, dyt)
-                + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
-            )
-
     # now that we know the slice to slice offset, we construct the catalogue
     # of all the beads
     bb = bead_collection()
