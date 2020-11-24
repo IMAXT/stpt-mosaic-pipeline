@@ -7,13 +7,12 @@ import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
+import zarr
 from dask import delayed
 from distributed import Client, as_completed
-from scipy.stats import median_absolute_deviation as mad
-
-import zarr
 from imaxt_image.registration import find_overlap_conf
 from owl_dev.logging import logger
+from scipy.stats import median_absolute_deviation as mad
 
 from . import ops
 from .geometric_distortion import apply_geometric_transform, read_calib
@@ -880,6 +879,7 @@ class Section:
 
         return (shape_0, shape_1)
 
+    @retry(Exception)
     def stitch(self, output: Path):
         """Stitch and save all images"""
         abs_pos, abs_err = self.compute_abspos()
