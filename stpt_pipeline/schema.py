@@ -23,5 +23,6 @@ schema = vo.Schema(
         vo.Required("output_dir"): vo.Coerce(Path),
         vo.Required("recipes"): vo.All(list, check_recipes),
         vo.Optional("cof_dist"): cof_dist_schema,
+        vo.Optional("sections", default=[]): list,
     }
 )

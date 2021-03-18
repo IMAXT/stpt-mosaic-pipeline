@@ -10,8 +10,13 @@ from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
 
 
-def main(  # noqa: C901
-    *, root_dir: Path, output_dir: Path, recipes: List, cof_dist: Dict = None
+def main(
+    *,
+    root_dir: Path,
+    output_dir: Path,
+    recipes: List,
+    sections: List,
+    cof_dist: Dict = None,
 ) -> None:
     """[summary]
 
@@ -41,6 +46,8 @@ def main(  # noqa: C901
         mos.initialize_storage(output_dir_full)
 
         for section in mos.sections():
+            if sections and (section.name not in sections):
+                continue
             section.find_offsets()
             section.stitch(output_dir_full)
 

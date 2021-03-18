@@ -80,6 +80,7 @@ class Section:
     def __init__(self, section: xr.DataArray, stage_size: List[int] = None):
         self._section = section
         self.stage_size = stage_size
+        self.name = section.name
 
     def __getitem__(self, attr):
         res = self._section.attrs["raw_meta"][0][attr]
