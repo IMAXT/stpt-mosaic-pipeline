@@ -58,7 +58,7 @@ def _get_labels(im, pedestal, im_std):
     )
 
     # Watershed segmentation for beads that are touching
-    im_temp = (labels > 0).astype(float)
+    im_temp = labels > 0
     distance = ndi.distance_transform_edt(im_temp)
     local_maxi = peak_local_max(
         distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp
