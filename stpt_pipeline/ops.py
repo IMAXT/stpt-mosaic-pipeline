@@ -52,4 +52,4 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
             "z": range(nz),
         },
     )
-    return narr.chunk((1,1,10,2040,2040))
+    return narr.chunk((1, 1, 10, 2040, 2040))
