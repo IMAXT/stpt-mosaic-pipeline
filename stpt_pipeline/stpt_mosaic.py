@@ -832,7 +832,7 @@ class Section:
         mos_raw = da.stack(mos_raw)
         mos_overlap = da.stack(mos_overlap)
         mos_err = da.stack(mos_err)
-        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 1, 1040, 1040))
+        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 10, 2080, 2080))
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(

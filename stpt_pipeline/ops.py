@@ -27,7 +27,7 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
     """
     nt, nz, nch, ny, nx = arr.chunks
     ny, nx = min(ny), min(nx)
-    arr = arr.chunk((1, 1, 1, ny, nx))
+    arr = arr.chunk((1, 1, nch, ny, nx))
     arr_t = []
     for t in arr.type:
         arr_z = []
@@ -36,7 +36,7 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
             for ch in arr.channel:
                 im = arr.sel(z=z.values, type=t.values, channel=ch.values)
                 res = transform(im)
-                arr_ch.append(res.rechunk(1040, 1040))
+                arr_ch.append(res.rechunk(2040, 2040))
             arr_z.append(da.stack(arr_ch))
         arr_t.append(da.stack(arr_z))
     arr_t = da.stack(arr_t)
@@ -52,4 +52,4 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
             "z": range(nz),
         },
     )
-    return narr
+    return narr.chunk((1,1,10,2040,2040))
