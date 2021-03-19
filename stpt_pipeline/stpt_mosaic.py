@@ -786,7 +786,7 @@ class Section:
                             im_dis[i],
                             ch,
                             conf,
-                            (y0,x0),
+                            (y0, x0),
                             abs_err,
                             imgtype,
                             nimg,
