@@ -20,6 +20,9 @@ from .retry import retry
 from .settings import Settings
 
 
+CHUNK_SIZE = 2080
+
+
 @delayed
 def _sink(*args):
     return args
@@ -29,7 +32,7 @@ def _sink(*args):
 def _get_image(group, imgtype, shape, dtype="float32"):
     try:
         arr = group.create_dataset(
-            imgtype, shape=shape, chunks=(4160, 4160), dtype=dtype
+            imgtype, shape=shape, chunks=(CHUNK_SIZE, CHUNK_SIZE), dtype=dtype
         )
     except ValueError:
         arr = group[imgtype]
@@ -832,7 +835,7 @@ class Section:
         mos_raw = da.stack(mos_raw)
         mos_overlap = da.stack(mos_overlap)
         mos_err = da.stack(mos_err)
-        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 10, 2080, 2080))
+        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 10, CHUNK_SIZE, CHUNK_SIZE))
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(
@@ -865,7 +868,7 @@ class Section:
         return metadata
 
     def _stage_size(self, abs_pos):
-        # 20200717 increased security padding to 1.5x2080
+        # 20200717 increased security padding to 1.5xCHUNK_SIZE
         shape_0 = (
             int(np.array(abs_pos[:, 0]).max() - np.array(abs_pos[:, 0]).min())
             + 1.5 * self.shape[0]
@@ -876,12 +879,12 @@ class Section:
         )
 
         # this has to be a multiple of the chunk size
-        if shape_0 % 2080 != 0:
-            n_imgs = int(shape_0 / 2080.0) + 1
-            shape_0 = int(2080 * n_imgs)
-        if shape_1 % 2080 != 0:
-            n_imgs = int(shape_1 / 2080.0) + 1
-            shape_1 = int(2080 * n_imgs)
+        if shape_0 % CHUNK_SIZE != 0:
+            n_imgs = int(shape_0 / CHUNK_SIZE) + 1
+            shape_0 = int(CHUNK_SIZE * n_imgs)
+        if shape_1 % CHUNK_SIZE != 0:
+            n_imgs = int(shape_1 / CHUNK_SIZE) + 1
+            shape_1 = int(CHUNK_SIZE * n_imgs)
 
         return (shape_0, shape_1)
 
