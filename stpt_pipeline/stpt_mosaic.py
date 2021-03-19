@@ -888,17 +888,27 @@ class Section:
     @retry(Exception)
     def stitch(self, output: Path):
         """Stitch and save all images"""
+
+        ds = xr.open_zarr(output / "mos.zarr")
+        if self.name in ds:
+            logger.info("Section %s already done. Skipping.", self.name)
+            return
+
         abs_pos, abs_err = self.compute_abspos()
         conf = self.get_distconf()
 
         if self.stage_size is None:
             self.stage_size = self._stage_size(abs_pos)
 
+        # clean temporary mosaic if exists
+        shutil.rmtree(f"{output}/temp.zarr", ignore_errors=True)
+
         z = self._create_temporary_mosaic(conf, abs_pos, abs_err, output)
 
         arr = self._compute_final_mosaic(z)
         ds = xr.Dataset({self._section.name: arr})
         ds.to_zarr(output / "mos.zarr", mode="a")
+
         # clean temporary mosaic
         shutil.rmtree(f"{output}/temp.zarr", ignore_errors=True)
         logger.info("Mosaic saved %s", output / "mos.zarr")

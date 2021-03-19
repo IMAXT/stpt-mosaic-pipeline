@@ -16,6 +16,7 @@ def main(
     output_dir: Path,
     recipes: List,
     sections: List,
+    reset: bool,
     cof_dist: Dict = None,
 ) -> None:
     """[summary]
@@ -43,7 +44,8 @@ def main(
 
     mos = STPTMosaic(root_dir)
     if "mosaic" in recipes:
-        mos.initialize_storage(output_dir_full)
+        if reset:
+            mos.initialize_storage(output_dir_full)
 
         for section in mos.sections():
             if sections and (section.name not in sections):

@@ -9,7 +9,13 @@ name: stpt
 root_dir: /data/meds1_a/imaxtapp/incoming/MA1-0003/STPT/MA1-191127-1125
 output_dir: /data/meds1_b/processed/STPT
 
-recipes: ["preprocess", "distortion", "mosaic", "downsample", "tiff"]
+recipes: ["mosaic", "downsample", "beadreg"]
+
+# Sections to process
+# sections: []
+
+# Set to false to continue stopped run
+# reset: true
 
 # Resources requested
 resources:
