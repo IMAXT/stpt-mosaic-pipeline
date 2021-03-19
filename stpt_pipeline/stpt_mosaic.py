@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 import zarr
 from dask import delayed
-from distributed import Client, as_completed
+from distributed import Client, as_completed, Lock
 from imaxt_image.registration import find_overlap_conf
 from owl_dev.logging import logger
 from scipy.stats import median_absolute_deviation as mad
@@ -40,35 +40,21 @@ def _get_image(group, imgtype, shape, dtype="float32"):
 
 
 @delayed
-def _mosaic(im_t, conf, abs_pos, abs_err, imgtype, out_shape=None, out=None):
-    assert out_shape is not None
+def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     assert imgtype in ["raw", "pos_err", "overlap"]
-    y_size, x_size = out_shape
-    y_delta, x_delta = np.min(abs_pos, axis=0)
-    logger.debug("Mosaic size: %dx%d", x_size, y_size)
-    big_picture = np.zeros((y_size, x_size), dtype="float32")
+    assert out is not None
+    y0, x0 = pos
+    yslice = slice(y0, y0 + im.shape[0])
+    xslice = slice(x0, x0 + im.shape[1])
 
-    for i, im in enumerate(im_t):
-        y0 = int(abs_pos[i, 0] - y_delta)
-        x0 = int(abs_pos[i, 1] - x_delta)
-        yslice = slice(y0, y0 + im.shape[0])
-        xslice = slice(x0, x0 + im.shape[1])
-
+    lock_name = f"{imgtype}-{ch}"
+    with Lock(lock_name):
         if imgtype == "raw":
-            mos = im * conf
-            big_picture[yslice, xslice] = big_picture[yslice, xslice] + mos
+            out[yslice, xslice] = out[yslice, xslice] + im * conf
         elif imgtype == "overlap":
-            big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf
+            out[yslice, xslice] = out[yslice, xslice] + conf
         elif imgtype == "pos_err":
-            big_picture[yslice, xslice] = big_picture[yslice, xslice] + conf * np.sum(
-                np.array(abs_err) ** 2
-            )
-
-    if out is not None:
-        out[:, :] = big_picture
-        return
-
-    return big_picture
+            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(np.array(abs_err) ** 2)
 
 
 class Section:
@@ -770,16 +756,18 @@ class Section:
 
     def _create_temporary_mosaic(self, conf, abs_pos, abs_err, output):
         logger.info("Creating temporary mosaic")
-        z = zarr.open(f"{output}/temp.zarr", mode="w")
+        z = zarr.open(f"{output}/{self.name}.zarr", mode="w")
 
         flat = read_calib(Settings.flat_file)
         dark = read_calib(Settings.dark_file) / Settings.norm_val
         cof_dist = Settings.cof_dist
+        y_delta, x_delta = np.min(abs_pos, axis=0)
 
         for sl in range(self.slices):
+            results = []
             for ch in range(self.channels):
                 im_t = self.get_img_section(sl, ch)
-                g = z.create_group(f"/mosaic/{self._section.name}/z={sl}/channel={ch}")
+                g = z.create_group(f"/mosaic/{self.name}/z={sl}/channel={ch}")
 
                 im_dis = [
                     apply_geometric_transform(
@@ -788,22 +776,24 @@ class Section:
                     for im in im_t
                 ]
 
-                results = []
                 for imgtype in ["raw", "pos_err", "overlap"]:
                     nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
 
-                    res = _mosaic(
-                        im_dis,
-                        conf,
-                        abs_pos,
-                        abs_err,
-                        imgtype,
-                        out_shape=self.stage_size,
-                        out=nimg,
-                    )
-                    results.append(res)
-                dask.compute(results)
-                logger.debug("Mosaic Slice %d, Channel %d", sl, ch)
+                    for i in range(len(im_dis)):
+                        y0 = int(abs_pos[i, 0] - y_delta)
+                        x0 = int(abs_pos[i, 1] - x_delta)
+                        res = _mosaic(
+                            im_dis[i],
+                            ch,
+                            conf,
+                            (y0,x0),
+                            abs_err,
+                            imgtype,
+                            nimg,
+                        )
+                        results.append(res)
+            dask.compute(results)
+            logger.debug("Mosaic %s Slice %d done", self.name, sl)
         return z
 
     def _compute_final_mosaic(self, z):
@@ -812,7 +802,7 @@ class Section:
         mos_raw = []
         mos_err = []
 
-        for name, offset in z[f"mosaic/{self._section.name}"].groups():
+        for name, offset in z[f"mosaic/{self.name}"].groups():
             raw = da.stack(
                 [
                     da.from_zarr(ch["raw"]) / da.from_zarr(ch["overlap"])
@@ -888,7 +878,6 @@ class Section:
 
         return (shape_0, shape_1)
 
-    @retry(Exception)
     def stitch(self, output: Path):
         """Stitch and save all images"""
 
@@ -903,9 +892,6 @@ class Section:
         if self.stage_size is None:
             self.stage_size = self._stage_size(abs_pos)
 
-        # clean temporary mosaic if exists
-        shutil.rmtree(f"{output}/temp.zarr", ignore_errors=True)
-
         z = self._create_temporary_mosaic(conf, abs_pos, abs_err, output)
 
         arr = self._compute_final_mosaic(z)
@@ -913,7 +899,7 @@ class Section:
         ds.to_zarr(output / "mos.zarr", mode="a")
 
         # clean temporary mosaic
-        shutil.rmtree(f"{output}/temp.zarr", ignore_errors=True)
+        shutil.rmtree(f"{output}/{self.name}.zarr", ignore_errors=True)
         logger.info("Mosaic saved %s", output / "mos.zarr")
 
 
