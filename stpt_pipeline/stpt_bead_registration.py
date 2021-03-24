@@ -516,9 +516,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 "Analysing beads in " + this_slice + " Z{0:03d}".format(this_optical)
             )
 
-            im = mos_zoom[this_slice].sel(
-                z=this_optical, channel=Settings.channel_to_use, type="mosaic"
-            )
+            im = mos_zoom[this_slice].sel(z=this_optical, type="mosaic").mean(axis=0)
 
             conf = mos_zoom[this_slice].sel(
                 z=this_optical, channel=Settings.channel_to_use, type="conf"
@@ -559,10 +557,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             full_im = (
                 mos_full[this_slice]
-                .sel(z=this_optical, channel=Settings.channel_to_use, type="mosaic")
+                .sel(z=this_optical, type="mosaic")
+                .mean(axis=0)
                 .data
             )
 
+            # conf and error are the same across channels
             full_conf = (
                 mos_full[this_slice]
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="conf")
