@@ -574,7 +574,19 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="err")
                 .data
             )
-
+            logger.debug(
+                """"
+                    labels: {0:d},{1:d}
+                    im: {2:d},{3:d}
+                    conf: {4:d},{5:d}
+                    err: {6:d},{7:d}
+                """.format(
+                    *full_labels.shape,
+                    *full_im.shape,
+                    *full_conf.shape,
+                    *full_err.shape,
+                )
+            )
             temp = []
             logger.debug("Fitting all beads...")
             for i in range(len(beads_1st_iter)):
