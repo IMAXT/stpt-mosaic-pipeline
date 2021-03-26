@@ -61,7 +61,7 @@ def _get_labels(im, pedestal, im_std):
     im_temp = labels > 0
     distance = ndi.distance_transform_edt(im_temp)
     local_maxi = peak_local_max(
-        distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp.astype('int')
+        distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp.astype("int")
     )
     marks = ndi.label(local_maxi)[0]
     labels = watershed(-distance, marks, mask=im_temp)
@@ -516,8 +516,10 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 "Analysing beads in " + this_slice + " Z{0:03d}".format(this_optical)
             )
 
-            im = mos_zoom[this_slice].sel(
-                z=this_optical, channel=Settings.channel_to_use, type="mosaic"
+            im = (
+                mos_zoom[this_slice]
+                .sel(z=this_optical, type="mosaic")
+                .mean(dim="channel")
             )
 
             conf = mos_zoom[this_slice].sel(
@@ -551,7 +553,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                     )
                 )
             beads_1st_iter = dask.compute(temp)[0]
-            logger.debug('First pass completed')
+            logger.debug("First pass completed")
 
             # resampling to full arr
             full_labels = delayed(ndi.zoom)(labels, Settings.zoom_level, order=0)
@@ -559,10 +561,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             full_im = (
                 mos_full[this_slice]
-                .sel(z=this_optical, channel=Settings.channel_to_use, type="mosaic")
+                .sel(z=this_optical, type="mosaic")
+                .mean(dim="channel")
                 .data
             )
 
+            # conf and error are the same across channels
             full_conf = (
                 mos_full[this_slice]
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="conf")
@@ -574,7 +578,19 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 .sel(z=this_optical, channel=Settings.channel_to_use, type="err")
                 .data
             )
-
+            logger.debug(
+                """"
+                    labels: {0:d},{1:d}
+                    im: {2:d},{3:d}
+                    conf: {4:d},{5:d}
+                    err: {6:d},{7:d}
+                """.format(
+                    *full_labels.shape,
+                    *full_im.shape,
+                    *full_conf.shape,
+                    *full_err.shape,
+                )
+            )
             temp = []
             logger.debug("Fitting all beads...")
             for i in range(len(beads_1st_iter)):
