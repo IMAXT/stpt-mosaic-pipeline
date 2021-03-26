@@ -61,7 +61,7 @@ def _get_labels(im, pedestal, im_std):
     im_temp = labels > 0
     distance = ndi.distance_transform_edt(im_temp)
     local_maxi = peak_local_max(
-        distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp.astype('int')
+        distance, indices=False, footprint=np.ones((3, 3)), labels=im_temp.astype("int")
     )
     marks = ndi.label(local_maxi)[0]
     labels = watershed(-distance, marks, mask=im_temp)
@@ -553,7 +553,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                     )
                 )
             beads_1st_iter = dask.compute(temp)[0]
-            logger.debug('First pass completed')
+            logger.debug("First pass completed")
 
             # resampling to full arr
             full_labels = delayed(ndi.zoom)(labels, Settings.zoom_level, order=0)
