@@ -9,8 +9,8 @@ with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
 requirements = [
-    "dask>=2.26",
-    "distributed>=2.26",
+    "dask",
+    "distributed",
     "imaxt-image",
     "zarr",
     "numpy",
@@ -18,7 +18,7 @@ requirements = [
     "scipy",
     "voluptuous",
     "xarray",
-    "opencv-python==4.2.*",
+    "opencv-python",
     "owl-pipeline-develop",
     "scikit-image",
 ]
