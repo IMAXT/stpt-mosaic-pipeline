@@ -43,7 +43,12 @@ def main(
 
     if "cals" in recipes:
 
-        build_cals(mos, output_dir)
+        cal_zarr_name = build_cals(mos, output_dir)
+        cal_type = 'sample'
+
+    else:
+        cal_zarr_name = ''
+        cal_type = 'static'
 
     if "mosaic" in recipes:
         if reset:
@@ -52,6 +57,8 @@ def main(
         for section in mos.sections():
             if sections and (section.name not in sections):
                 continue
+            section.cal_type = cal_type
+            section.cal_zarr = cal_zarr_name
             section.find_offsets()
             section.stitch(output_dir)
 
