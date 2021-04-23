@@ -7,6 +7,7 @@ from numcodecs import blosc
 from .settings import Settings
 from .stpt_bead_registration import find_beads, register_slices
 from .stpt_mosaic import STPTMosaic
+from .ops import build_cals
 
 blosc.use_threads = False
 
@@ -38,7 +39,12 @@ def main(
 
     # TODO: compute dark and flat
 
-    mos = STPTMosaic(input_dir)
+    mos = STPTMosaic(root_dir)
+
+    if "cals" in recipes:
+
+        build_cals(mos, output_dir)
+
     if "mosaic" in recipes:
         if reset:
             mos.initialize_storage(output_dir)
