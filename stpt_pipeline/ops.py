@@ -62,7 +62,7 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
 def build_cals(
     arr: xr.DataArray,
     output_arr: Path
-) -> None:
+) -> Path:
 
     to_log('Building flats...')
 
@@ -98,12 +98,12 @@ def build_cals(
 
         flat_frames = np.where(
             (means > threshold_val) &
-            (np.isnan(means) == False)
+            (np.isnan(means) is False)
         )[0]
 
         dark_frames = np.where(
             (means <= threshold_val) &
-            (np.isnan(means) == False)
+            (np.isnan(means) is False)
         )[0]
 
         flats = []
@@ -165,3 +165,5 @@ def build_cals(
     )
     xarr['DARKS'] = temp
     xarr.to_zarr(zarr_dir, mode='a')
+
+    return zarr_dir
