@@ -3,7 +3,7 @@ import dask.array as da
 import xarray as xr
 import zarr
 from dask import delayed
-from local_log import to_log, to_debug
+from .local_log import to_log, to_debug
 from pathlib import Path
 import numpy as np
 
