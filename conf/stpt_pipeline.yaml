@@ -7,11 +7,11 @@ name: stpt
 
 # Pipeline arguments
 # root_dir: /data/meds1_a/imaxtapp/incoming/FQ1-0001/STPT/FQ1-190509-1508
-root_dir: /data/meds1_a/imaxtapp/incoming/MA1-0003/STPT/MA1-191127-1125
+root_dir: /data/meds1_d/storage/raw/stpt/20210105_PDX_STG316_GFP_rep1_100x15um
 # root_dir: /data/meds1_a/imaxtapp/incoming/CM1-0018/STPT/CM1-191127-1125
-output_dir: /data/meds1_b/eglez/imaxt/stpt6
+output_dir: /data/meds1_a/cgonzal/stpt_out
 
-recipes: ["mosaic", "downsample", "beadreg"]
+recipes: ["cals"]
 
 # Sections to process
 # sections: []
