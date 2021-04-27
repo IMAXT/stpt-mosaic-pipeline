@@ -70,6 +70,10 @@ def build_cals(
     _ = zarr.open(f"{zarr_dir}", mode="w")
 
     flats = []
+    flat_medians = []
+    n_flats = []
+    darks = []
+    n_darks = []
     slices = list(arr)
 
     coords = arr[slices[0]].coords
@@ -82,31 +86,33 @@ def build_cals(
 
         to_log('Building channel #' + str(this_channel))
 
-        imgs = da.concatenate(
-            [
-                arr[t].sel(channel=this_channel) for t in slices
-            ],
-            axis=0
-        )
+        _imgs = []
+        for this_slice in slices:
+            for this_z in coords['z'].values:
+                _imgs.append(
+                    arr[this_slice].sel(
+                        channel=this_channel,
+                        z=this_z
+                    )
+                )
+
+        imgs = da.concatenate(_imgs, axis=0)
 
         # there are some empty tiles, removing, also
         # some nans
 
-        means = imgs.mean(axis=(1, 2)).compute()
+        means = np.array(imgs.mean(axis=(1, 2)).compute())
 
         threshold_val = np.median(means)
 
         flat_frames = np.where(
-            (means > threshold_val) &
-            (np.isnan(means) is False)
+            (means > threshold_val)
         )[0]
 
         dark_frames = np.where(
-            (means <= threshold_val) &
-            (np.isnan(means) is False)
+            (means <= threshold_val)
         )[0]
 
-        flats = []
         if len(flat_frames) < 10:
             to_log(
                 'CH#' + str(channels[i]) +
@@ -116,12 +122,14 @@ def build_cals(
 
         else:
             temp = imgs[flat_frames, ].mean(axis=0).compute()
+            flat_median = np.median(temp)
 
-            to_debug('Median c#{0:d} = {1:.3f}'.format(i, np.median(temp)))
+            to_debug('Median flat c#{0:d} = {1:.3f}'.format(i, flat_median))
 
-            flats.append(temp / np.median(temp))
+            flats.append(temp / flat_median)
+            flat_medians.append(flat_median)
+            n_flats.append(len(flat_frames))
 
-        darks = []
         if len(dark_frames) < 10:
             to_log(
                 'CH#' + str(channels[i]) +
@@ -130,10 +138,12 @@ def build_cals(
             darks.append(np.zeros(imgs[0, ].shape))
 
         else:
-            temp = imgs[dark_frames, ].median(axis=0).compute()
+            temp = da.median(imgs[dark_frames, ], axis=0).compute()
+            dark_median = np.median(temp)
 
-            to_debug('Median c#{0:d} = {1:.3f}'.format(i, np.median(temp)))
+            to_debug('Median dark c#{0:d} = {1:.3f}'.format(i, dark_median))
 
+            n_darks.append(len(dark_frames))
             darks.append(temp)
 
     xarr = xr.open_zarr(f"{zarr_dir}")
@@ -149,6 +159,10 @@ def build_cals(
             "channel": coords['channel'].values,
         },
     )
+
+    temp.attrs['N_SAMPLE'] = n_flats
+    temp.attrs['MEDIANS'] = flat_medians
+
     xarr['FLATS'] = temp
     xarr.to_zarr(zarr_dir, mode='a')
 
@@ -163,6 +177,8 @@ def build_cals(
             "channel": coords['channel'].values,
         },
     )
+    temp.attrs['N_SAMPLE'] = n_darks
+
     xarr['DARKS'] = temp
     xarr.to_zarr(zarr_dir, mode='a')
 

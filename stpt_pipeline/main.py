@@ -43,7 +43,7 @@ def main(
 
     if "cals" in recipes:
 
-        cal_zarr_name = build_cals(mos._ds, output_dir)
+        cal_zarr_name = build_cals(mos._ds, output_dir_full)
         cal_type = 'sample'
 
     else:
