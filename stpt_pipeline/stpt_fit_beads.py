@@ -402,13 +402,16 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             im_temp = (mask > 0.1).astype(float)
             distance = ndi.distance_transform_edt(im_temp)
-            local_maxi = peak_local_max(
+            coords = peak_local_max(
                 distance,
-                indices=False,
                 footprint=np.ones((3, 3)),
                 labels=im_temp
             )
-            marks = ndi.label(local_maxi)[0]
+
+            _m = np.zeros(distance.shape, dtype=bool)
+            _m[tuple(coords.T)] = True
+
+            marks = ndi.label(_m)[0]
             labels = watershed(-distance, marks, mask=im_temp)
 
             da_labels = da.from_array(labels).persist()
