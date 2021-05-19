@@ -79,3 +79,7 @@ class Settings:
     bead_detection_threshold = 5.0
     """Detection threshold for beads
     """
+
+    nn_model_file = 'model_stpt.h5'
+    """NN model
+    """

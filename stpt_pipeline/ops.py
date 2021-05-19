@@ -103,14 +103,14 @@ def build_cals(
 
         means = np.array(imgs.mean(axis=(1, 2)).compute())
 
-        threshold_val = np.median(means)
+        threshold_vals = np.quantile(means, (1e-17, 0.5))
 
         flat_frames = np.where(
-            (means > threshold_val)
+            (means >= threshold_vals[1])
         )[0]
 
         dark_frames = np.where(
-            (means <= threshold_val)
+            (means <= threshold_vals[0])
         )[0]
 
         if len(flat_frames) < 10:

@@ -187,10 +187,13 @@ class Section:
     def get_distconf(self):
 
         if self.cal_type == 'sample':
+            logger.info('Reading ' + self.cal_zarr.name)
             xr_cal = xr.open_zarr(self.cal_zarr)
-            flat = xr_cal['FLATS'].sel(
-                channel=Settings.channel_to_use
-            ).values()
+            flat = da.array(
+                xr_cal['FLATS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
         else:
             flat = read_calib(Settings.flat_file)
             flat = flat[Settings.channel_to_use - 1]
@@ -213,12 +216,16 @@ class Section:
         dist_conf = self.get_distconf()
         if self.cal_type == 'sample':
             xr_cal = xr.open_zarr(self.cal_zarr)
-            flat = xr_cal['FLATS'].sel(
-                channel=Settings.channel_to_use
-            ).values()
-            dark = xr_cal['DARKS'].sel(
-                channel=Settings.channel_to_use
-            ).values()
+            flat = da.array(
+                xr_cal['FLATS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
+            dark = da.array(
+                xr_cal['DARKS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
         else:
             flat = read_calib(Settings.flat_file)[Settings.channel_to_use - 1]
             dark = (
@@ -794,8 +801,8 @@ class Section:
 
         if self.cal_type == 'sample':
             cal_xr = xr.open_zarr(self.cal_zarr)
-            flat = cal_xr['FLATS'].values()
-            dark = cal_xr['DARKS'].values()
+            flat = da.array(cal_xr['FLATS'].values)
+            dark = da.array(cal_xr['DARKS'].values)
         else:
             flat = read_calib(Settings.flat_file)
             dark = read_calib(Settings.dark_file) / Settings.norm_val

@@ -37,28 +37,39 @@ def main(
     if not input_dir.exists():
         raise FileNotFoundError(f"Directory {input_dir} does not exist.")
 
-    # TODO: compute dark and flat
-
     mos = STPTMosaic(root_dir)
 
+    done_reset = False
+
     if "cals" in recipes:
+        if reset:
+            mos.initialize_storage(output_dir_full)
+            done_reset = True
 
-        cal_zarr_name = build_cals(mos._ds, output_dir_full)
-        cal_type = 'sample'
-
-    else:
-        cal_zarr_name = ''
-        cal_type = 'static'
+        _ = build_cals(mos._ds, output_dir_full)
 
     if "mosaic" in recipes:
         if reset:
             mos.initialize_storage(output_dir)
 
+        # need to recheck because you can launch mosaic
+        # without cals
+        cal_zarr_name = output_dir_full / 'cals.zarr'
+        if cal_zarr_name.is_dir():
+            cal_type = 'sample'
+            logger.info('Using sample calibrations')
+        else:
+            cal_type = 'static'
+            cal_zarr_name = ''
+            logger.info('Using static calibrations')
+
         for section in mos.sections():
             if sections and (section.name not in sections):
                 continue
+
             section.cal_type = cal_type
             section.cal_zarr = cal_zarr_name
+
             section.find_offsets()
             section.stitch(output_dir)
 
