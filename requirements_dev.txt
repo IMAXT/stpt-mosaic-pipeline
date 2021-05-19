@@ -8,3 +8,5 @@ better-exceptions
 bumpversion
 Sphinx
 sphinx-autodoc-typehints
+scikit-image>=0.18
+tifffile>=2020.6.3

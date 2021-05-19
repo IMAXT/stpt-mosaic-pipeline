@@ -5,11 +5,26 @@ from owl_dev import pipeline
 from numcodecs import blosc
 
 from .settings import Settings
-from .stpt_bead_registration import find_beads, register_slices
+from .stpt_fit_beads import find_beads
+from .stpt_bead_registration import register_slices
 from .stpt_mosaic import STPTMosaic
 from .ops import build_cals
 
 blosc.use_threads = False
+
+
+def _check_cals(cal_zarr_name: Path):
+
+    if cal_zarr_name.is_dir():
+        _type = 'sample'
+        _name = cal_zarr_name
+        logger.info('Using sample calibrations')
+    else:
+        _type = 'static'
+        _name = ''
+        logger.info('Using static calibrations')
+
+    return _type, _name
 
 
 @pipeline
@@ -39,13 +54,10 @@ def main(
 
     mos = STPTMosaic(root_dir)
 
-    done_reset = False
+    if reset:
+        mos.initialize_storage(output_dir_full)
 
     if "cals" in recipes:
-        if reset:
-            mos.initialize_storage(output_dir_full)
-            done_reset = True
-
         _ = build_cals(mos._ds, output_dir_full)
 
     if "mosaic" in recipes:
@@ -54,14 +66,9 @@ def main(
 
         # need to recheck because you can launch mosaic
         # without cals
-        cal_zarr_name = output_dir_full / 'cals.zarr'
-        if cal_zarr_name.is_dir():
-            cal_type = 'sample'
-            logger.info('Using sample calibrations')
-        else:
-            cal_type = 'static'
-            cal_zarr_name = ''
-            logger.info('Using static calibrations')
+        cal_zarr_name, cal_type = _check_cals(
+            output_dir_full / 'cals.zarr'
+        )
 
         for section in mos.sections():
             if sections and (section.name not in sections):

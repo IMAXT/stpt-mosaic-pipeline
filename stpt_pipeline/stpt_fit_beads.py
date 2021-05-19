@@ -30,8 +30,7 @@ def _rezoom(lab, final_shape):
 
 @delayed
 def fit_bead(
-    fit_im: da.DataArray,
-    labels: da.DataArray,
+    fit_im, labels,
     this_bead: dict,
     bscale: float,
     bzero: float,
