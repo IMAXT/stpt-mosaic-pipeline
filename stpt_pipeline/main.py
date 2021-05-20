@@ -54,9 +54,6 @@ def main(
 
     mos = STPTMosaic(root_dir)
 
-    if reset:
-        mos.initialize_storage(output_dir_full)
-
     if "cals" in recipes:
         _ = build_cals(mos._ds, output_dir_full)
 
