@@ -86,7 +86,10 @@ def main(
     if "downsample" in recipes:
         mos.downsample(output_dir)
 
-    mos_dis = output_dir / "mos.zarr"
-    if "beadreg" in recipes:
+    mos_dis = output_dir_full / "mos.zarr"
+
+    if "beadfit" in recipes:
         find_beads(mos_dis)
+
+    if "beadreg" in recipes:
         register_slices(mos_dis)
