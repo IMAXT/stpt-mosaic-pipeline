@@ -36,7 +36,7 @@ def main(
     sections: List,
     reset: bool,
     cof_dist: Dict = None,
-) -> None:
+) -> None:  # noqa: C901
     """[summary]
 
     Parameters
@@ -70,9 +70,10 @@ def main(
             output_dir_full / 'cals.zarr'
         )
 
-        for section in mos.sections():
-            if sections and (section.name not in sections):
-                continue
+        if not(sections):
+            sections = mos.sections()
+
+        for section in sections:
 
             section.cal_type = cal_type
             section.cal_zarr = cal_zarr_name
