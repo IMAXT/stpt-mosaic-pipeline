@@ -1,3 +1,5 @@
+from .settings import Settings
+from .bead_model_sphere import fit_2d, get_bead_emission
 from pathlib import Path
 
 import dask
@@ -13,304 +15,413 @@ from scipy.stats import median_absolute_deviation as mad
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from keras.models import load_model
+from distributed import Client, as_completed
 
-from .bead_model_sphere import fit_2d
-from .settings import Settings
+import warnings
+# this limits the volume of optimise/minimise overflow/sqrt(-1) warwnings
+warnings.filterwarnings('ignore', 'invalid value encountered')
+warnings.filterwarnings('ignore', 'overflow encountered')
+
+
+def _check_size(rad):
+    """
+        Checks radius against feature size
+        set in Settngs
+    """
+
+    if rad < 0.5 * Settings.feature_size[0]:
+        return False
+    if rad > 0.5 * Settings.feature_size[1]:
+        return False
+
+    return True
 
 
 def _rezoom(lab, final_shape):
+    """
+        Upsamples the zoomed labels image to full res
+    """
 
     zoom_fac = (
-        np.float(final_shape[0] / lab.shape[0]),
-        np.float(final_shape[1] / lab.shape[1])
+        float(final_shape[0] / lab.shape[0]),
+        float(final_shape[1] / lab.shape[1])
     )
 
     return np.round(ndi.zoom(lab, zoom_fac, order=0)).astype(int)
 
 
-@delayed
-def fit_bead(
-    fit_im, labels,
-    this_bead: dict,
-    bscale: float,
-    bzero: float,
-    first_pass: bool,
-    do_print: bool
-) -> dict:
+def _get_center_rad(label_im, bead_dict):
     """
-    Fits a profile to a bead in an STPT mosaic image.
-    If first_pass is no, this is assumed to be a downsampled image
+        Returns the initial guess for the center of a bead and
+        its width based on a labelled bead mask.
+    """
 
-    Parameters
-    ----------
-    fit_im:
-        Mosaic dataarray with the beads
-    labels:
-        labeled bead mask
-    this_bead:
-        fit parameters dictionary of the bead, in case of
-        first pass, inly this_bead['id'] is used
-    bscale, bzero:
-        scale and pedestal of fit_im
-    first_pass:
-        toggles first quick fit or full res fit
-    do_print:
-        if on, verbose fit
+    _x = da.arange(label_im.shape[0])
+    _y = da.arange(label_im.shape[1])
+
+    w_x = da.sum(label_im == bead_dict['id'], axis=1)
+    w_y = da.sum(label_im == bead_dict['id'], axis=0)
+    x = np.sum(_x * w_x) / np.sum(w_x)
+    y = np.sum(_y * w_y) / np.sum(w_y)
+
+    d_x = np.max(_x[w_x > 0]) - np.min(_x[w_x > 0])
+    d_y = np.max(_y[w_y > 0]) - np.min(_y[w_y > 0])
+
+    return x, y, 0.5 * (d_x + d_y)
+
+
+def _get_cutout_zoomed(bead_im, bead_labels, bead_dict):
+    """
+        Performs the cutting of a window around a bead,
+        based on a labelled bead mask. This is intended for
+        the downsampled image and beads that have been not
+        fit before, so there's no estimation for size or
+        coordinates.
+
+        It returns a quality flag to discard false detections,
+        the cutouts of the image and the labels, the coordinates
+        of the lower left corner of the cutout and the input
+        bead information. This is useful to pipe this output
+        into other routines.
+    """
+
+    padding = 2  # px to add to cutouts
+
+    x, y, w = _get_center_rad(bead_labels, bead_dict)
+
+    half_width = int(0.5 * w)
+
+    if _check_size(half_width * Settings.zoom_level) is False:
+        return False, 0.0, 0.0, 0.0, 0.0
+
+    ll_x = int(
+        np.clip(
+            x - half_width - padding,
+            0,
+            bead_im.shape[0] - 2 * (half_width + padding)
+        )
+    )
+    ll_y = int(
+        np.clip(
+            y - half_width - padding,
+            0, bead_im.shape[1] - 2 * (half_width + padding)
+        )
+    )
+
+    im_cutout = bead_im[
+        ll_x:ll_x + 2 * (half_width + padding),
+        ll_y:ll_y + 2 * (half_width + padding)
+    ]
+
+    labels_zoom = bead_labels[
+        ll_x:ll_x + 2 * (half_width + padding),
+        ll_y:ll_y + 2 * (half_width + padding)
+    ]
+
+    return True, im_cutout, labels_zoom, ll_x, ll_y, bead_dict
+
+
+def _get_cutout_full(bead_im, bead_labels, bead_dict):
+    """
+        Same as _get_cutout_zoomed, but for the full resolution
+        image.
     """
 
     padding = 10  # px to add to cutouts
+
+    r = bead_dict['r_mask'] * Settings.zoom_level
+    center = (
+        np.clip(
+            int(bead_dict['x'] * Settings.zoom_level),
+            0,
+            bead_im.shape[0] - 1
+        ),
+        np.clip(
+            int(bead_dict['y'] * Settings.zoom_level),
+            0,
+            bead_im.shape[1] - 1
+        )
+    )
+
+    # cutout lower left corner
+    half_width = int(r)
+
+    if _check_size(half_width) is False:
+        return False, 0.0, 0.0, 0.0, 0.0
+
+    ll_x = int(
+        np.clip(
+            center[0] - half_width - padding,
+            0,
+            bead_im.shape[0] - 2 * (half_width + padding)
+        )
+    )
+    ll_y = int(
+        np.clip(
+            center[1] - half_width - padding,
+            0, bead_im.shape[1] - 2 * (half_width + padding)
+        )
+    )
+
+    im_cutout = bead_im[
+        ll_x:ll_x + 2 * (half_width + padding),
+        ll_y:ll_y + 2 * (half_width + padding)
+    ]
+
+    # Because labels is done over a downsampled image,
+    # we need to resample up
+
+    small_x = int(np.round(ll_x / Settings.zoom_level))
+    small_y = int(np.round(ll_y / Settings.zoom_level))
+
+    small_width = int(
+        np.round((2 * (half_width + padding)) / Settings.zoom_level)
+    )
+
+    labels_small = bead_labels[
+        small_x:small_x + small_width,
+        small_y:small_y + small_width
+    ]
+
+    labels_zoom = _rezoom(labels_small, im_cutout.shape)
+
+    return True, im_cutout, labels_zoom, ll_x, ll_y, bead_dict
+
+
+def _fit_bead_zoomed(cut_collection):
+    """
+    Fits a profile to a bead in a downsampled STPT mosaic image.
+
+    Because this is the downsampled image, it is assumed that there
+    is no info about the beads shape/size, so there are estimated
+    from the labels, and the inital fit parameters are randomly chosen.
+
+    Parameters
+    ----------
+    cut_collection:
+        The ouput from get_cutout_zoomed
+    """
 
     fit_res = {}
 
     fit_res['success'] = False
 
-    if first_pass:
-        i_x, i_y = np.where(labels == this_bead['id'])
-
-        r = 0.5 * (
-            np.max(np.abs(i_x - np.mean(i_x))) +
-            np.max(np.abs(i_y - np.mean(i_y)))
-        )
-
-        center = (
-            int(np.mean(i_x)),
-            int(np.mean(i_y))
-        )
-
-        # if too small or too big likely to be interloper
-        if r < 2:
-            return fit_res
-
-        if r > 100:
-            return fit_res
-
+    if cut_collection[0] == False:
+        return fit_res
     else:
-        r = this_bead['r'] * Settings.zoom_level
+        fit_mask = cut_collection[2]
+        fit_im = cut_collection[1]
+        ll_x = cut_collection[3]
+        ll_y = cut_collection[4]
+        this_bead = cut_collection[5]
 
-        center = (
-            np.clip(
-                int(this_bead['x'] * Settings.zoom_level),
-                0,
-                fit_im.shape[0] - 1
-            ),
-            np.clip(
-                int(this_bead['y'] * Settings.zoom_level),
-                0,
-                fit_im.shape[1] - 1
-            )
-        )
-
-        # if too small or too big likely to be interloper
-        if r < 10:
-            return fit_res
-
-        if r > 300:
-            return fit_res
-
-    logger.debug(this_bead['id'], r)
-
-    half_width = int(r)
-
-    # cutout lower left corner
-    ll = [
-        int(np.clip(
-            center[0] - half_width - padding,
-            0,
-            fit_im.shape[0] - 2 * (half_width + padding)
-        )),
-        int(np.clip(
-            center[1] - half_width - padding,
-            0, fit_im.shape[1] - 2 * (half_width + padding)
-        ))
-    ]
-
-    im_cutout = fit_im[
-        ll[0]:ll[0] + 2 * (half_width + padding),
-        ll[1]:ll[1] + 2 * (half_width + padding)
-    ] * bscale + bzero
-
-    # Because labels is done over a pyrdown image,
-    # in case of full fit, need to resample up
-
-    if first_pass:
-
-        labels_zoom = labels[
-            ll[0]:ll[0] + 2 * (half_width + padding),
-            ll[1]:ll[1] + 2 * (half_width + padding)
-        ]
-
-    else:
-
-        small_corner = [
-            int(np.round(ll[0] / Settings.zoom_level)),
-            int(np.round(ll[1] / Settings.zoom_level)),
-        ]
-        small_width = int(
-            np.round((2 * (half_width + padding)) / Settings.zoom_level))
-
-        labels_small = labels[
-            small_corner[0]:small_corner[0] + small_width,
-            small_corner[1]:small_corner[1] + small_width
-        ]
-
-        labels_zoom = _rezoom(labels_small, im_cutout.shape)
-
-    conf_cutout = (
-        (labels_zoom == this_bead['id']) |
-        (labels_zoom == 0)
-    ) * 1.0
+    fit_conf = ((fit_mask == 0) + (fit_mask == this_bead['id'])).astype(float)
 
     x2d = np.array([
-        [t * 1.0] * conf_cutout.shape[1]
-        for t in range(conf_cutout.shape[0])
+        [t * 1.0] * fit_conf.shape[1]
+        for t in range(fit_conf.shape[0])
     ])
     y2d = np.array([
-        np.arange(conf_cutout.shape[1])
-        for t in range(conf_cutout.shape[0])
+        np.arange(fit_conf.shape[1])
+        for t in range(fit_conf.shape[0])
     ])
 
-    central_val = fit_im[center[0], center[1]]
-    pedestal = np.clip(im_cutout.min(), 0, 1e7)
+    pedestal = np.clip(fit_im.min().values, 0, 1e7)
 
-    if first_pass:
-        # because we are setting the parameters blindly,
-        # the two cases are different enough that we need
-        # to try for both sets of initial paremeters
-        # and compare the final residuals to choose
-        #
-        # first try assuming cut bead
-        depth_ini = 0.5 * r
-        theta1 = [
-            depth_ini,
-            r,
-            (central_val - pedestal),
-            0.1,
-            pedestal,
-            center[0] - ll[0],
-            center[1] - ll[1]
-        ]
+    r = 0.5 * 0.5 * (fit_im.shape[0] + fit_im.shape[1])
+    center = [
+        0.5 * fit_im.shape[0],
+        0.5 * fit_im.shape[1]
+    ]
+    central_val = fit_im[int(center[0]), int(center[1])].values
 
-        fit_1 = minimize(
-            fit_2d, theta1,
-            args=(
-                im_cutout.flatten(),
-                x2d.flatten(), y2d.flatten(),
-                conf_cutout.flatten()
-            ),
-            method='Powell'
-        )
+    n_tries = 5
 
-        # second assuming embedded bead
+    # because we are setting the parameters blindly,
+    # we generate a small sample of random starting
+    # points and see which combo gives the lowest
+    # residuals
 
-        depth_ini = 1.1 * r
+    theta_all = np.array([
+        np.random.uniform(-1.0, 1.0, n_tries) * r,
+        np.random.normal(1, 0.2, n_tries) * r,
+        np.ones(n_tries) * (central_val - pedestal),
+        np.random.uniform(0.0, 0.5, n_tries),
+        np.ones(n_tries) * pedestal,
+        np.ones(n_tries) * center[0],
+        np.ones(n_tries) * center[1]
+    ])
 
-        theta2 = [
-            depth_ini,
-            r,
-            (central_val - pedestal) * 10,
-            0.1,
-            pedestal,
-            center[0] - ll[0],
-            center[1] - ll[1]
-        ]
+    res_fun = 1e17
+    res = []
 
-        fit_2 = minimize(
-            fit_2d, theta2,
-            args=(
-                im_cutout.flatten(),
-                x2d.flatten(), y2d.flatten(),
-                conf_cutout.flatten()
-            ),
-            method='Powell'
-        )
+    for i in range(n_tries):
 
-        # check for lower residuals
+        theta = theta_all[:, i]
 
-        res = fit_2
-
-        if fit_1['fun'] < fit_2['fun']:
-            res = fit_1
-
-    else:
-
-        theta = [
-            this_bead['fit_pars'][0] * Settings.zoom_level,
-            this_bead['fit_pars'][1] * Settings.zoom_level,
-            this_bead['fit_pars'][2] * Settings.zoom_level,
-            this_bead['fit_pars'][3],
-            this_bead['fit_pars'][-3],
-            center[0] - ll[0],
-            center[1] - ll[1]
-        ]
-
-        res = minimize(
+        fit_temp = minimize(
             fit_2d, theta,
             args=(
-                im_cutout.flatten(),
-                x2d.flatten(), y2d.flatten(),
-                conf_cutout.flatten()
+                fit_im.values,
+                x2d, y2d,
+                fit_conf,
+                False
             ),
             method='Powell'
         )
 
-    for _i in range(3):
+        if fit_temp['fun'] < res_fun:
+            res_fun = fit_temp['fun']
+            res = fit_temp
 
-        c = res['x']
-        res = minimize(
-            fit_2d, c,
-            args=(
-                im_cutout.flatten(),
-                x2d.flatten(), y2d.flatten(),
-                conf_cutout.flatten()
-            ),
-            method='Powell'
-        )
+    if _check_size(res['x'][1] * Settings.zoom_level) is False:
+        fit_res['success'] = False
+        r_mask = 0
+    else:
+        rs = np.arange(0, res['x'][1] * 1.5, 0.1)
+        ps = get_bead_emission(*res['x'][0:-3], rs)
+        ii = np.where(ps < 0.1)
+
+        if len(ii) == 0:
+            r_mask = 0.0
+        else:
+            r_mask = rs[np.min(ii)]
 
     fit_res['id'] = this_bead['id']
-    fit_res['x'] = ll[0] + res['x'][-2]
-    fit_res['y'] = ll[1] + res['x'][-1]
-    fit_res['r'] = res['x'][2]
-    fit_res['fit_pars'] = res['x']
+    fit_res['x'] = ll_x + res['x'][-2]
+    fit_res['y'] = ll_y + res['x'][-1]
+    fit_res['r'] = res['x'][1]
+    fit_res['r_mask'] = r_mask
+    fit_res['fit_pars'] = list(res['x'])
     fit_res['success'] = res['success']
+    fit_res['fit'] = True
+
+    # check for size
+    if _check_size(r_mask * Settings.zoom_level) is False:
+        fit_res['success'] = False
 
     return fit_res
 
 
-def _check_bead(this_bead, done_x, done_y, full_shape):
+def _fit_bead_full(cut_collection) -> dict:
+    """
+    Same as _fit_bead_zoomed, but for full resolution. The bead size/position
+    and the first guess for the fit parameters are taken from the results
+    of _fit_bead_zoomed and up-scaled.
+    """
 
-    if this_bead["success"] is False:
-        return False
+    fit_res = {}
 
-    if (this_bead["x"] > full_shape[0] + 50) or (this_bead["y"] > full_shape[1] + 50):
-        return False
+    fit_res['success'] = False
 
-    if this_bead["rad"] > Settings.feature_size[1]:
-        return False
+    if cut_collection[0] == False:
+        return fit_res
+    else:
+        fit_mask = cut_collection[2]
+        fit_im = cut_collection[1]
+        ll_x = cut_collection[3]
+        ll_y = cut_collection[4]
+        this_bead = cut_collection[5]
 
-    r = np.sqrt(
-        (this_bead["x"] - np.array(done_x)) ** 2
-        + (this_bead["y"] - np.array(done_y)) ** 2
-    )
-    if r.min() < 0.5 * Settings.feature_size[0]:
-        return False
+    fit_conf = ((fit_mask == 0) + (fit_mask == this_bead['id'])).astype(float)
+
+    del fit_mask
+
+    x2d = np.array([
+        [t * 1.0] * fit_conf.shape[1]
+        for t in range(fit_conf.shape[0])
+    ])
+    y2d = np.array([
+        np.arange(fit_conf.shape[1])
+        for t in range(fit_conf.shape[0])
+    ])
+
+    pedestal = np.clip(fit_im.min().values, 0, 1e7)
+
+    n_tries = 3
+
+    res = {'x': [
+        this_bead['fit_pars'][0] * Settings.zoom_level,
+        this_bead['fit_pars'][1] * Settings.zoom_level,
+        this_bead['fit_pars'][2],
+        this_bead['fit_pars'][3],
+        pedestal,
+        this_bead['x'] * Settings.zoom_level - ll_x,
+        this_bead['y'] * Settings.zoom_level - ll_y
+    ]
+    }
+
+    for i in range(n_tries):
+
+        c = res['x']
+
+        res = minimize(
+            fit_2d, c,
+            args=(
+                fit_im.values,
+                x2d, y2d,
+                fit_conf,
+                False
+            ),
+            method='Powell'
+        )
+    del fit_im
+    del fit_conf
+
+    if _check_size(res['x'][1]) is False:
+        fit_res['success'] = False
+        r_mask = 0.0
+    else:
+        rs = np.arange(0, res['x'][1] * 1.5, 0.1)
+        ps = get_bead_emission(*res['x'][0:-3], rs)
+        ii = np.where(ps < 0.1)[0]
+
+        if len(ii) == 0:
+            r_mask = 0.0
+        else:
+            r_mask = rs[np.min(ii)]
+
+    fit_res['id'] = this_bead['id']
+    fit_res['x'] = ll_x + res['x'][-2]
+    fit_res['y'] = ll_y + res['x'][-1]
+    fit_res['r'] = res['x'][1]
+    fit_res['r_mask'] = r_mask
+    fit_res['fit_pars'] = list(res['x'])
+    fit_res['success'] = res['success']
+    fit_res['fit'] = True
+
+    # check for size
+    if _check_size(r_mask) is False:
+        fit_res['success'] = False
+
+    return fit_res
 
 
-@delayed(nout=2)
-def image_stats(im, conf):
+@ delayed(nout=2)
+def _image_stats(im, conf):
+    """
+        Calculates the image statistics taking into account
+        the confidence map
+    """
     mask = conf > 0
     pedestal = np.median(im[mask])
-    im_std = 1.48 * mad(im[mask], axis=None)
+    # im_std = 1.48 * mad(im[mask], axis=None)
+    # std works better for NN
+    im_std = im[mask].std()
     logger.debug("Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
     return pedestal, im_std
 
 
-def find_beads(mos_zarr: Path):  # noqa: C901
+def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
     """
     Finds all the beads in all the slices (physical and optical) in the
     zarr, and fits the bead profile.
 
     Attaches all the bead info as attrs to the zarr
     """
+
+    client = Client.current()
+
     # this is to store the beads later
     zarr_store = zarr.open(f"{mos_zarr}", mode="a")
 
@@ -324,8 +435,9 @@ def find_beads(mos_zarr: Path):  # noqa: C901
     bead_par_to_attr_name = {
         "id": "bead_id",
         "success": "bead_conv",
-        "fit": "bead_fit_pars",
+        "fit_pars": "bead_fit_pars",
         "r": "bead_rad",
+        "r_mask": "mask_rad",
         "x": "bead_x",
         "y": "bead_y",
         "z": "bead_z"
@@ -335,9 +447,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
     mos_zoom = xr.open_zarr(f"{mos_zarr}", group=f"l.{Settings.zoom_level}")
     bscale, bzero = mos_full.attrs['bscale'], mos_full.attrs['bzero']
 
-    full_shape = (mos_full.dims["y"], mos_full.dims["x"])
-
-    for this_slice in list(mos_zoom):
+    for this_slice in sections:
 
         first_bead = True
         bead_cat = {}
@@ -353,20 +463,22 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                 mos_zoom[this_slice]
                 .sel(z=this_optical, type="mosaic")
                 .mean(dim="channel")
-            )
+            ) * bscale + bzero
 
             conf = mos_zoom[this_slice].sel(
                 z=this_optical, channel=Settings.channel_to_use,
                 type="conf"
             )
 
-            im_med, im_std = image_stats(im.data, conf.data).compute()
+            im_med, im_std = _image_stats(im.data, conf.data).compute()
             im_shape = im.shape
 
+            # this is how the NN was trained
             stage = np.clip((im - im_med) / im_std, -5, 5) / 5.
 
             mask = np.zeros(im_shape)
 
+            # building the resulting mask by chunks
             i = 0
             while i * (model_window - window_offset) < im_shape[0]:
 
@@ -404,7 +516,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             distance = ndi.distance_transform_edt(im_temp)
             coords = peak_local_max(
                 distance,
-                footprint=np.ones((3, 3)),
+                footprint=np.ones((5, 5)),
                 labels=im_temp
             )
 
@@ -414,7 +526,11 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             marks = ndi.label(_m)[0]
             labels = watershed(-distance, marks, mask=im_temp)
 
-            da_labels = da.from_array(labels).persist()
+            # by setting this, we effectively incorporate
+            # the confidence map into the label mask
+            labels[conf == 0] = -99
+
+            da_labels = da.from_array(labels)
 
             logger.debug(
                 "Found {0:d} preliminary beads".format(
@@ -424,106 +540,109 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             logger.debug("Fitting preliminary detections")
 
+            temp_beads = []
             temp = []
-            for i in range(1, int(labels.max())):
-                _d = {}
-                _d['id'] = i
-                temp.append(
-                    fit_bead(
-                        im,
-                        da_labels,
-                        _d,
-                        bscale,
-                        bzero,
-                        True,
-                        False
+
+            for i in range(1, labels.max()):
+                # for i in range(1, 20):
+
+                this_bead = {
+                    'id': i,
+                    'fit': False
+                }
+
+                _cut = _get_cutout_zoomed(im, da_labels, this_bead)
+
+                temp.append(dask.delayed(_fit_bead_zoomed)(_cut))
+
+            futures = client.compute(temp)
+            done_x = [-10]
+            done_y = [-10]
+            for fut in as_completed(futures):
+                t = fut.result()
+                if t['success']:
+                    # sometimes fits converge to the
+                    # same bead from two neighbouring labels
+                    # with this we remove repetitions
+                    r_done = np.sqrt(
+                        (np.array(done_x) - t['x'])**2 +
+                        (np.array(done_y) - t['y'])**2
                     )
-                )
-            beads_1st_iter = dask.compute(temp)[0]
+
+                    if r_done.min() > 1:
+                        temp_beads.append(t)
+                        done_x.append(t['x'])
+                        done_y.append(t['y'])
+
             logger.debug("First pass completed")
+            logger.debug("Found {0:d} beads".format(len(temp_beads)))
 
-            full_im = (
-                mos_full[this_slice]
-                .sel(z=this_optical, type="mosaic")
-                .mean(dim="channel")
-                .data
-            )
+            client.restart()
 
-            # conf and error are the same across channels
-            full_conf = (
-                mos_full[this_slice]
-                .sel(z=this_optical, channel=Settings.channel_to_use, type="conf")
-                .data
-            )
+            full_im = mos_full[this_slice].sel(
+                z=this_optical,
+                type="mosaic"
+            ).mean(dim='channel') * bscale + bzero
 
-            full_err = (
-                mos_full[this_slice]
-                .sel(z=this_optical, channel=Settings.channel_to_use, type="err")
-                .data
-            )
-            logger.debug(
-                """"
-                    labels: {0:d},{1:d}
-                    im: {2:d},{3:d}
-                    conf: {4:d},{5:d}
-                    err: {6:d},{7:d}
-                """.format(
-                    *labels.shape,
-                    *full_im.shape,
-                    *full_conf.shape,
-                    *full_err.shape,
-                )
-            )
+            logger.debug("Fitting full res beads...")
+            all_beads = []
+
             temp = []
-            logger.debug("Fitting all beads...")
-            for i in range(len(beads_1st_iter)):
-                if beads_1st_iter[i]['success'] is False:
-                    continue
+            for i in range(len(temp_beads)):
 
-                temp.append(
-                    fit_bead(
-                        full_im,
-                        da_labels,
-                        beads_1st_iter[i],
-                        bscale,
-                        bzero,
-                        False,
-                        False
+                this_bead = temp_beads[i]
+
+                _cut = _get_cutout_full(full_im, da_labels, this_bead)
+
+                temp.append(delayed(_fit_bead_full)(_cut))
+
+            futures = client.compute(temp)
+            done_x = [-10]
+            done_y = [-10]
+            for fut in as_completed(futures):
+                t = fut.result()
+                if t['success']:
+                    r_done = np.sqrt(
+                        (np.array(done_x) - t['x'])**2 +
+                        (np.array(done_y) - t['y'])**2
                     )
-                )
-            all_beads = dask.compute(temp)[0]
 
-            # now we store all good beads in a dictionary, removing
-            # duplicates and bad fits
+                    if r_done.min() > 1:
+                        done_x.append(t['x'])
+                        done_y.append(t['y'])
+                        # adding optical slice
+                        t['z'] = float(this_optical)
+
+                        all_beads.append(t)
+
+            # now we store all good beads in a dictionary
             #
             # We'll store beads in the attrs for the physical slice
             # so we need to add the optical slice
             #
-            done_x = [0]
-            done_y = [0]
+            logger.debug("Found {0:d} beads".format(len(all_beads)))
+            for this_bead in all_beads:
 
-            for this_bead, bead_err in all_beads:
-                this_bead["err"] = bead_err
+                for this_key in this_bead.keys():
+                    # this is just for internal
+                    # bookeeping while fitting
+                    if this_key == 'fit':
+                        continue
 
-                if _check_bead(this_bead, done_x, done_y, full_shape) is False:
-                    continue
-
-                done_x.append(this_bead["x"])
-                done_y.append(this_bead["y"])
-
-                if first_bead:
-                    for this_key in this_bead.keys():
+                    if first_bead:
                         bead_cat[this_key] = [this_bead[this_key]]
-                    bead_cat["z"] = [float(this_optical)]
-                else:
-                    for this_key in this_bead.keys():
+                    else:
                         bead_cat[this_key].append(this_bead[this_key])
-                    bead_cat["z"].append(float(this_optical))
 
                 first_bead = False
 
         # Store results as attrs in the full res slice
         for this_key in bead_cat.keys():
-            zarr_store[this_slice].attrs[bead_par_to_attr_name[this_key]] = bead_cat[
+
+            zarr_store[this_slice].attrs[
+                bead_par_to_attr_name[this_key]
+            ] = bead_cat[
                 this_key
             ]
+
+        client.restart()

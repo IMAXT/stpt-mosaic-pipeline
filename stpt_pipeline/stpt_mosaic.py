@@ -984,6 +984,10 @@ class STPTMosaic:
         for section in self._ds:
             yield Section(self._ds[section], self.stage_size)
 
+    def section_labels(self):
+        """Returns list of section labels"""
+        return list(self._ds)
+
     def downsample(self, output: Path):
         """Downsample mosaic.
 

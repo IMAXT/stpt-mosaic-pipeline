@@ -68,8 +68,8 @@ class Settings:
     """zoom level to be used for 1st pass detection
     """
 
-    feature_size = [50.0, 500.0]
-    """Min/Max allowed bead size
+    feature_size = [20.0, 400.0]
+    """Min/Max allowed bead size, px
     """
 
     sample_detection_threshold = 2.0
@@ -80,6 +80,6 @@ class Settings:
     """Detection threshold for beads
     """
 
-    nn_model_file = 'model_stpt.h5'
+    nn_model_file = '/data/meds1_a/cgonzal/imaxt/nn_models/model_stpt.h5'
     """NN model
     """

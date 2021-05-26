@@ -17,7 +17,7 @@ from owl_dev.logging import logger
 
 def r_from_depth(depth, r_bead):
     """
-        Calculates the cylindrical r coordinate for a given depth
+        Calculates the r of the spherycal corona for a given depth
 
         Inputs:
         -----
@@ -40,12 +40,13 @@ def get_z(depth, r_bead, r):
             depth: float
 
     """
+    z = np.zeros_like(r) + depth
 
-    r_in = r_from_depth(depth, r_bead)
-
-    z = depth - np.sqrt(r_bead**2 - r**2)
+    z[r <= r_bead] = depth - np.sqrt(r_bead**2 - r[r <= r_bead]**2)
 
     if (depth >= -r_bead) & (depth <= r_bead):
+
+        r_in = r_from_depth(depth, r_bead)
 
         z[r <= r_in] = 0
 
