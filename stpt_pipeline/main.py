@@ -54,6 +54,10 @@ def main(
 
     mos = STPTMosaic(root_dir)
 
+    if not(sections):
+        sections = mos.sections()
+        section_labels = mos.section_labels()
+
     if reset:
         mos.initialize_storage(output_dir_full)
 
@@ -69,9 +73,6 @@ def main(
         cal_zarr_name, cal_type = _check_cals(
             output_dir_full / 'cals.zarr'
         )
-
-        if not(sections):
-            sections = mos.sections()
 
         for section in sections:
 
@@ -90,10 +91,7 @@ def main(
     mos_dis = output_dir_full / "mos.zarr"
 
     if "beadfit" in recipes:
-        if not(sections):
-            sections = mos.section_labels()
-
-        find_beads(mos_dis, sections)
+        find_beads(mos_dis, section_labels)
 
     if "beadreg" in recipes:
         register_slices(mos_dis)

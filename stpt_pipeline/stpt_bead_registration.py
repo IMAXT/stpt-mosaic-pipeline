@@ -26,24 +26,41 @@ class bead_collection:
         self.id_list = []
         self.x_list = []
         self.y_list = []
+        self.z_list = []
         self.x_list_raw = []
         self.y_list_raw = []
+        self.r_mask = []
 
         self.critical_radius = 20.0
 
-    def add_bead(self, x_cor, y_cor, x_raw, y_raw, b_id):
+    def add_bead(self, x_cor, y_cor, x_raw, y_raw, z, r_m, b_id):
+        """
+            Adds a bead to the collection, and matches with
+            average coordinates
+
+            Parameters
+            ----------
+            x_cor, y_cor: coordinates corrected from slice displacement,
+                if available.
+            x_raw, y_raw: uncorrected coordinates.
+            z: optical slice
+            r_m: mask radius
+            b_id: unique bead id
+        """
 
         if len(self.x) == 0:
-            r = np.array([self.critical_radius * 10.0])
+            r = np.array([self.critical_radius * 10.])
         else:
-            r = np.sqrt((x_cor - self.x) ** 2 + (y_cor - self.y) ** 2)
+            r = np.sqrt((x_cor - self.x)**2 + (y_cor - self.y)**2)
 
         if r.min() < self.critical_radius:
             self.x_list[r.argmin()].append(x_cor)
             self.y_list[r.argmin()].append(y_cor)
+            self.z_list[r.argmin()].append(z)
             self.x_list_raw[r.argmin()].append(x_raw)
             self.y_list_raw[r.argmin()].append(y_raw)
             self.id_list[r.argmin()].append(b_id)
+            self.r_mask[r.argmin()].append(r_m)
             self.n[r.argmin()] += 1
         else:
             self.id.append(b_id)
@@ -55,11 +72,16 @@ class bead_collection:
 
             self.x_list.append([x_cor])
             self.y_list.append([y_cor])
+            self.z_list.append([z])
             self.x_list_raw.append([x_raw])
             self.y_list_raw.append([y_raw])
             self.id_list.append([b_id])
+            self.r_mask.append([r_m])
 
     def update_coords(self):
+        """
+            Recalculates the average coordinates for the beads
+        """
         for i in range(len(self.id)):
             if self.n[i] > 1:
                 self.x[i] = np.mean(np.array(self.x_list[i]))
