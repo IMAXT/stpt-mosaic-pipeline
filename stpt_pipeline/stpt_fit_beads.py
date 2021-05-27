@@ -11,7 +11,6 @@ import zarr
 from dask import delayed
 from owl_dev.logging import logger
 from scipy.optimize import minimize
-from scipy.stats import median_absolute_deviation as mad
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from keras.models import load_model
@@ -206,7 +205,7 @@ def _fit_bead_zoomed(cut_collection):
 
     fit_res['success'] = False
 
-    if cut_collection[0] == False:
+    if cut_collection[0] is False:
         return fit_res
     else:
         fit_mask = cut_collection[2]
@@ -314,7 +313,7 @@ def _fit_bead_full(cut_collection) -> dict:
 
     fit_res['success'] = False
 
-    if cut_collection[0] == False:
+    if cut_collection[0] is False:
         return fit_res
     else:
         fit_mask = cut_collection[2]
@@ -351,7 +350,7 @@ def _fit_bead_full(cut_collection) -> dict:
     ]
     }
 
-    for i in range(n_tries):
+    for _i in range(n_tries):
 
         c = res['x']
 

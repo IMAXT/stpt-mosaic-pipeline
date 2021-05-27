@@ -1,12 +1,11 @@
-import builtins
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
 import zarr
 from owl_dev.logging import logger
-from scipy.stats import median_absolute_deviation as mad
 from scipy.sparse import coo_matrix, dia_matrix
+from scipy.stats import median_abs_deviation as mad
 import scipy.optimize as op
 
 
@@ -161,7 +160,7 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
 
 def _prefilter_beads(xb, yb, x_cat, y_cat):
     """
-        Before adding beads to a bead collection, checks if 
+        Before adding beads to a bead collection, checks if
         any pair of beads would match to the same object from
         the collection, and selects the closest.
     """
@@ -194,7 +193,7 @@ def _prefilter_beads(xb, yb, x_cat, y_cat):
 
 def _shift_func(x, A, At, d, mat_var):
     """
-        Calculates the difference between the 
+        Calculates the difference between the
         bead displacements according to shift vectors
         and the measured values
     """
@@ -377,7 +376,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         _x = bb.x_list_raw[i]
         _y = bb.y_list_raw[i]
         _id = bb.id_list[i]
-        _r = bb.r_mask[i]
         # the z value takes into account physical and optical
         _z = [
             (float(t[1:4]) - 1) * n_op + float(t[6:9]) for t in _id
@@ -394,7 +392,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
             dx.append(_x[j] - _x[j - 1])
             dy.append(_y[j] - _y[j - 1])
-            ex.append(0.01 * np.sqrt(_r[j]**2 + _r[j - 1]**2))
+            ex.append(np.sqrt(_e[j]**2 + _e[j - 1]**2))
 
             row_counter += 1
         # adding last minus first
@@ -419,19 +417,15 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     ex = np.array(ex)
 
     # we minimise recursively trimming outliers
-
     for i in range(10):
+
         if i == 0:
             x0 = np.zeros(int(np.max(yi)) + 1)
             y0 = np.zeros(int(np.max(yi)) + 1)
 
-            ii = np.arange(len(dx))
-        else:
-            x0 = resx['x']
-            y0 = resy['x']
-            dr = (dx - mat.dot(x0))**2 + (dy - mat.dot(y0))**2
-            std = 10.
-            ii = np.where(dr < (13 - i) * std)[0]
+        dr = (dx - mat.dot(x0))**2 + (dy - mat.dot(y0))**2
+        std = 10.
+        ii = np.where(dr < (13 - i) * std)[0]
 
         mat_0 = mat.tocsr()[ii]
         mat_0_t = mat_0.T
@@ -443,6 +437,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
                            method='L-BFGS-B', jac=True, options={'disp': False})
         resy = op.minimize(_shift_func, y0, args=(mat_0, mat_0_t, dy_t, mat_var),
                            method='L-BFGS-B', jac=True, options={'disp': False})
+
+        x0 = resx['x']
+        y0 = resy['x']
 
     # to get an estimation of the errors, we update our bead collection
     # with the new displacements
