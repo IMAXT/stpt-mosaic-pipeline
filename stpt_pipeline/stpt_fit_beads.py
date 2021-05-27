@@ -577,8 +577,6 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
             logger.debug("First pass completed")
             logger.debug("Found {0:d} beads".format(len(temp_beads)))
 
-            client.restart()
-
             full_im = mos_full[this_slice].sel(
                 z=this_optical,
                 type="mosaic"
@@ -644,5 +642,3 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
             ] = bead_cat[
                 this_key
             ]
-
-        client.restart()

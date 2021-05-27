@@ -1,3 +1,4 @@
+import builtins
 from pathlib import Path
 
 import numpy as np
@@ -5,6 +6,8 @@ import xarray as xr
 import zarr
 from owl_dev.logging import logger
 from scipy.stats import median_absolute_deviation as mad
+from scipy.sparse import coo_matrix, dia_matrix
+import scipy.optimize as op
 
 
 class bead_collection:
@@ -92,23 +95,19 @@ class bead_collection:
 
 def _get_beads(slice_obj, z_val):
 
-    if "bead_z" in list(slice_obj.keys()):
+    z = np.array(slice_obj['bead_z'][:])
+    i_t = np.where(z == z_val)
 
-        z = np.array(slice_obj["bead_z"][:])
-        i_t = np.where(z == z_val)[0]
+    xc = np.array(slice_obj['bead_x'][:])[i_t]
+    yc = np.array(slice_obj['bead_y'][:])[i_t]
+    r_img = np.array(slice_obj['mask_rad'][:])[i_t]
+    ind = np.array(slice_obj['bead_id'][:])[i_t]
 
-        xc = np.array(slice_obj["bead_x"][:])[i_t]
-        yc = np.array(slice_obj["bead_y"][:])[i_t]
-        err = np.array(slice_obj["bead_centre_err"][:])[i_t]
-        rad = np.array(slice_obj["bead_rad"][:])[i_t]
-        ind = np.array(slice_obj["bead_id"][:])[i_t]
-
-        return ind, xc, yc, rad, err
-    else:
-        return [], [], [], [], []
+    return ind, xc, yc, r_img
 
 
 def _match_cats(xr, yr, er, xt, yt, et, errors=False):
+
     if len(xr) > len(xt):
         xs = np.array(xt)
         ys = np.array(yt)
@@ -132,59 +131,125 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         i_ls = []
         r_sl = []
         for i in range(len(xs)):
-            r = np.sqrt((xl - xs[i] - dx) ** 2 + (yl - ys[i] - dy) ** 2)
+            r = np.sqrt((xl - xs[i] - dx)**2 + (yl - ys[i] - dy)**2)
             r_sl.append(r.min())
             i_sl.append(i)
             i_ls.append(r.argmin())
         r_sl = np.array(r_sl)
-        # combined error, minimum error should be 2
-        e_c = np.sqrt(el[i_ls] ** 2 + es[i_sl] ** 2).clip(2)
+        # combined error
+        e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2)
 
         # only 3sigma matches
-        ii = np.where(r_sl - np.median(r_sl) < 3.0 *
+        ii = np.where(r_sl - np.median(r_sl) < 3. *
                       1.48 * mad(r_sl, axis=None))[0]
-
-        dx = np.sum((xl[i_ls] - xs[i_sl])[ii] / e_c[ii] ** 2) / np.sum(
-            1.0 / e_c[ii] ** 2
-        )
-        dy = np.sum((yl[i_ls] - ys[i_sl])[ii] / e_c[ii] ** 2) / np.sum(
-            1.0 / e_c[ii] ** 2
-        )
+        dx = np.median((xl[i_ls] - xs[i_sl])[ii])
+        dy = np.median((yl[i_ls] - ys[i_sl])[ii])
 
     if errors:
-        ex = np.sqrt(1.0 / np.sum(1.0 / e_c ** 2))
+        ex = np.sqrt(
+            1. / np.sum(1. / e_c**2)
+        )
         if len(xr) > len(xt):
             return dx, dy, ex, i_ls, i_sl
         else:
             return -dx, -dy, ex, i_sl, i_ls
-
     if len(xr) > len(xt):
         return dx, dy, i_ls, i_sl
     else:
         return -dx, -dy, i_sl, i_ls
 
 
-def _get_good_beads(mos_full, phys, opt, good_beads):
-    _ind, _x, _y, _, _e = _get_beads(mos_full[phys].attrs, opt)
+def _prefilter_beads(xb, yb, x_cat, y_cat):
+    """
+        Before adding beads to a bead collection, checks if 
+        any pair of beads would match to the same object from
+        the collection, and selects the closest.
+    """
 
-    this_slice = phys + "_Z{0:03d}".format(opt)
+    ib = []
+    rb = []
+    for i in range(len(xb)):
+        r = np.sqrt((xb[i] - x_cat)**2 + (yb[i] - y_cat)**2)
+        ib.append(np.argmin(r))
+        rb.append(np.min(r))
+    ib = np.array(ib)
+    rb = np.array(rb)
 
-    # we check which of these are repeated beads
-    ind_t = np.array([])
-    x_t = np.array([])
-    y_t = np.array([])
-    e_t = np.array([])
-    _j = 0
-    for this_id in _ind:
-        temp = this_slice + ":{0:05d}".format(int(this_id))
-        if temp in good_beads:
-            ind_t = np.append(ind_t, this_id)
-            x_t = np.append(x_t, _x[_j])
-            y_t = np.append(y_t, _y[_j])
-            e_t = np.append(e_t, _e[_j])
-        _j += 1
+    # checking repetitions
+    good_beads = []
+    done_beads = []
+    for i in range(len(xb)):
+        if i in done_beads:
+            continue
+        reps = np.where(ib == ib[i])[0]
+        if len(reps) > 1:
+            done_beads.extend(list(reps))
+            _t = np.argmin(rb[reps])
+            good_beads.append(_t)
+        else:
+            good_beads.append(i)
 
-    return ind_t, x_t, y_t, e_t
+    return good_beads
+
+
+def _shift_func(x, A, At, d, mat_var):
+    """
+        Calculates the difference between the 
+        bead displacements according to shift vectors
+        and the measured values
+    """
+    #
+    temp_dif = d - A.dot(x)
+    temp_prod = mat_var.dot(temp_dif)
+    #
+    f = np.dot(temp_dif.T, temp_prod)
+    #
+    grad_f = -2 * At.dot(temp_prod)
+    #
+    return f / float(len(d)), grad_f / float(len(d))
+
+
+def _build_collection(mos_zarr, dx, dy, physical, optical):
+    """
+        Builds a bead collection from the beads on
+        a zarr metadata and the calculated displacements
+    """
+
+    bb = bead_collection()
+
+    for i in range(len(physical)):
+        ref_slice = physical[i] + "_Z{0:03d}".format(optical[i])
+
+        dx_t = dx[i]
+        dy_t = dy[i]
+
+        ind_r, x_r, y_r, r_r = _get_beads(
+            mos_zarr[physical[i]].attrs, optical[i]
+        )
+        id_str = []
+        for this_id in ind_r:
+            id_str.append(ref_slice + ":{0:05d}".format(int(this_id)))
+        id_str = np.array(id_str)
+
+        if i > 0:
+            g = _prefilter_beads(x_r + dx_t, y_r + dy_t, bb.x, bb.y)
+        else:
+            g = range(len(x_r))
+
+        for j in g:
+            bb.add_bead(
+                x_r[j] + dx_t,
+                y_r[j] + dy_t,
+                x_r[j], y_r[j],
+                optical[i],
+                r_r[j],
+                id_str[j]
+            )
+
+        # at each slice we check matching beads and update avg coords
+        bb.update_coords()
+
+    return bb
 
 
 def register_slices(mos_zarr: Path):  # noqa: C901
@@ -207,42 +272,67 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             physical_slices.append(this_slice)
             optical_slices.append(this_optical)
 
-    # first pass crossmatch, taking into account all beads
+    # first pass crossmatch, taking into account all beads, these
+    # estimations are good and used later to refine, but also we can
+    # check if there are enough beads between slices
+
     dx = [0.0]  # these store the slice to slice offset
     dy = [0.0]
     logger.info("1st pass slice shifts")
     for i in range(1, len(physical_slices)):
 
         # We compare each slice (_t) with the previous one (_r)
-        _, x_t, y_t, _, e_t = _get_beads(
+        _, x_t, y_t, r_t = _get_beads(
             mos_full[physical_slices[i]].attrs, optical_slices[i]
         )
 
-        _, x_r, y_r, _, e_r = _get_beads(
+        _, x_r, y_r, r_r = _get_beads(
             mos_full[physical_slices[i - 1]].attrs, optical_slices[i - 1]
         )
+
+        # estimate of the error based on the radius
+        e_t = 0.01 * r_t
+        e_r = 0.01 * r_r
 
         if (len(x_t) > 0) & (len(x_r) > 0):
 
             dxt, dyt, i_rt, i_tr = _match_cats(x_r, y_r, e_r, x_t, y_t, e_t)
-            dx.append(dxt)
-            dy.append(dyt)
 
-            dr = np.sqrt(
-                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
-            )
-            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                          (x_r[i_rt] - x_t[i_tr]) ** 2)
+            if len(i_rt) < 3:
+                logger.info(
+                    '*** WARNING: Not enough beads in common between ' +
+                    physical_slices[i - 1] +
+                    'Z{0:03d}'.fomat(optical_slices[i - 1]) +
+                    physical_slices[i] +
+                    ' and Z{0:03d}'.fomat(optical_slices[i])
+                )
+                # set desp to 0
+                dxt = dyt = dr = dr0 = 0
+
+            else:
+                dr = np.sqrt(
+                    (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
+                    (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+                )
+                dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
+                              (x_r[i_rt] - x_t[i_tr]) ** 2)
 
         else:
-            dx.append(0.0)
-            dy.append(0.0)
+            logger.info(
+                '*** WARNING: Not enough beads in ' +
+                physical_slices[i - 1] +
+                'Z{0:03d}'.fomat(optical_slices[i - 1]) +
+                physical_slices[i] +
+                ' or Z{0:03d}'.fomat(optical_slices[i])
+            )
             i_tr = []
             dxt = dyt = dr = dr0 = 0
 
+        dx.append(dxt)
+        dy.append(dyt)
         logger.info(
-            physical_slices[i - 1]
+            '\t'
+            + physical_slices[i - 1]
             + "_Z{0:03d}:".format(optical_slices[i - 1])
             + physical_slices[i]
             + "_Z{0:03d}:".format(optical_slices[i])
@@ -253,123 +343,157 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
     # now that we know the slice to slice offset, we construct the catalogue
     # of all the beads
-    bb = bead_collection()
 
+    # because dx,dy are slice to slice, the total displacement
+    # is the sum of all the previous
+    abs_dx = np.array([np.sum(dx[0:t + 1]) for t in range(len(dx))])
+    abs_dy = np.array([np.sum(dy[0:t + 1]) for t in range(len(dy))])
+
+    bb = _build_collection(
+        mos_full, abs_dx, abs_dy,
+        physical_slices, optical_slices
+    )
+
+    # For the 2nd pass, we calculate the shifts taking all beads into
+    # account.
+
+    # First we need to build the matrixes, to speed things up we use
+    # sparse matrixes, and so the first step is just to generate vectors
+    # with the coordinates and the values to fill the matrices
+
+    logger.info("2nd pass slice shifts")
+    n_op = np.max(mos_full[physical_slices[0]].z.values) + 1
+    xi = []
+    yi = []
+    c = []
+    dx = []
+    dy = []
+    ex = []
+    row_counter = 0
+    for i in range(len(bb.id)):
+        if bb.n[i] < 3:
+            continue
+
+        _x = bb.x_list_raw[i]
+        _y = bb.y_list_raw[i]
+        _id = bb.id_list[i]
+        _r = bb.r_mask[i]
+        # the z value takes into account physical and optical
+        _z = [
+            (float(t[1:4]) - 1) * n_op + float(t[6:9]) for t in _id
+        ]
+        _e = 0.01 * np.array(bb.r_mask[i])
+        for j in range(1, len(_z)):
+            xi.append(row_counter)
+            yi.append(_z[j])
+            c.append(1.0)
+
+            xi.append(row_counter)
+            yi.append(_z[j - 1])
+            c.append(-1.0)
+
+            dx.append(_x[j] - _x[j - 1])
+            dy.append(_y[j] - _y[j - 1])
+            ex.append(0.01 * np.sqrt(_r[j]**2 + _r[j - 1]**2))
+
+            row_counter += 1
+        # adding last minus first
+        xi.append(row_counter)
+        yi.append(_z[0])
+        c.append(1.0)
+
+        xi.append(row_counter)
+        yi.append(_z[-1])
+        c.append(-1.0)
+
+        dx.append(_x[0] - _x[-1])
+        dy.append(_y[0] - _y[-1])
+        ex.append(10.)
+
+        row_counter += 1
+
+    # building matrix/vectos
+    mat = coo_matrix((c, (xi, yi)), (len(dx), int(np.max(yi)) + 1))
+    dx = np.array(dx)
+    dy = np.array(dy)
+    ex = np.array(ex)
+
+    # we minimise recursively trimming outliers
+
+    for i in range(10):
+        if i == 0:
+            x0 = np.zeros(int(np.max(yi)) + 1)
+            y0 = np.zeros(int(np.max(yi)) + 1)
+
+            ii = np.arange(len(dx))
+        else:
+            x0 = resx['x']
+            y0 = resy['x']
+            dr = (dx - mat.dot(x0))**2 + (dy - mat.dot(y0))**2
+            std = 10.
+            ii = np.where(dr < (13 - i) * std)[0]
+
+        mat_0 = mat.tocsr()[ii]
+        mat_0_t = mat_0.T
+        mat_var = dia_matrix((ex[ii]**(-2), 0), shape=(len(ii), len(ii)))
+        dx_t = dx[ii]
+        dy_t = dy[ii]
+
+        resx = op.minimize(_shift_func, x0, args=(mat_0, mat_0_t, dx_t, mat_var),
+                           method='L-BFGS-B', jac=True, options={'disp': False})
+        resy = op.minimize(_shift_func, y0, args=(mat_0, mat_0_t, dy_t, mat_var),
+                           method='L-BFGS-B', jac=True, options={'disp': False})
+
+    # to get an estimation of the errors, we update our bead collection
+    # with the new displacements
+
+    bb = _build_collection(
+        mos_full, resx['x'], resy['x'],
+        physical_slices, optical_slices
+    )
+
+    # now for each slice, we get the average radial offset from the beads
+    # to the bead collection
+    abs_err = []
     for i in range(len(physical_slices)):
-        ref_slice = physical_slices[i] + "_Z{0:03d}".format(optical_slices[i])
 
-        # because dx,dy are slice to slice, the total displacement
-        # is the sum of all the previous
-        dx_t = np.sum(dx[0: i + 1])
-        dy_t = np.sum(dy[0: i + 1])
-
-        ind_r, x_r, y_r, _, _ = _get_beads(
+        _, x_r, y_r, r_r = _get_beads(
             mos_full[physical_slices[i]].attrs, optical_slices[i]
         )
-        id_str = []
-        for this_id in ind_r:
-            id_str.append(ref_slice + ":{0:05d}".format(int(this_id)))
-        id_str = np.array(id_str)
 
+        _dr = []
         for j in range(len(x_r)):
-            bb.add_bead(x_r[j] + dx_t, y_r[j] + dy_t, x_r[j], y_r[j], id_str[j])
+            r = np.sqrt(
+                (x_r[j] + resx['x'][i] - bb.x)**2 +
+                (y_r[j] + resy['x'][i] - bb.y)**2
+            )
+            _dr.append(r.min())
 
-        # at each slice we check matching beads and update avg coords
-        bb.update_coords()
+        abs_err.append(np.median(np.array(_dr)))
 
-    # Now the we know wich objects can be seen in more than one slice,
-    # we re-compute the offsets but only using the beads that appear
-    # in at least all the optical slices and 2 physical
-
-    min_num_dets = np.max(np.array(optical_slices)) + 2
-
-    good_beads = []
-    for i in range(len(bb.x)):
-        if bb.n[i] >= min_num_dets:
-            good_beads.extend(bb.id_list[i])
-    # cleaning out repeated ids
-    good_beads = list(set(good_beads))
-
-    # here we store the new displacements, and a measurement of error
-    dx2 = [0.0]
-    dy2 = [0.0]
-    dd2 = [0.0]
-    logger.info("2nd pass slice shifts")
-    for i in range(1, len(physical_slices)):
-        this_slice = physical_slices[i] + "_Z{0:03d}".format(optical_slices[i])
-        ref_slice = physical_slices[i - 1] + \
-            "_Z{0:03d}".format(optical_slices[i - 1])
-
-        # only beads that have high reps
-        _, x_t, y_t, e_t = _get_good_beads(
-            mos_full, physical_slices[i], optical_slices[i], good_beads
+        ref_slice = '\t' + physical_slices[i] + \
+            "_Z{0:03d}: ".format(optical_slices[i])
+        logger.info(
+            ref_slice
+            + "{0:.1f} ".format(resx['x'][i])
+            + "{0:.1f} ".format(resy['x'][i])
+            + "{0:.1f} ".format(abs_err[-1])
         )
-
-        if len(x_t) > 0:
-            _, x_r, y_r, e_r = _get_good_beads(
-                mos_full, physical_slices[i -
-                                          1], optical_slices[i - 1], good_beads
-            )
-
-            dxt, dyt, edt, i_rt, i_tr = _match_cats(
-                x_r, y_r, e_r, x_t, y_t, e_t, errors=True
-            )
-
-            dx2.append(dxt)
-            dy2.append(dyt)
-            dd2.append(edt)
-
-            dr = np.sqrt(
-                (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-                (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
-            )
-            dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                          (x_r[i_rt] - x_t[i_tr]) ** 2)
-            logger.info(
-                ref_slice
-                + ":"
-                + this_slice
-                + " {0:d} ".format(len(i_tr))
-                + "{0:.1f} {1:.1f} ".format(dxt, dyt)
-                + "{0:.1f} {1:.1f} ".format(np.median(dr), np.median(dr0))
-            )
-        else:
-            # NO beads in this slice
-            dx2.append(0.0)
-            dy2.append(0.0)
-            dd2.append(100.0)
-
-            logger.info(
-                ref_slice
-                + ":"
-                + this_slice
-                + " {0:d} ".format(len(i_tr))
-                + "{0:.1f} {1:.1f} ".format(0.0, 0.0)
-                + "{0:.1f} {1:.1f} ".format(0.0, 0.0)
-            )
 
     # Now we store all the displacements as attrs
     cube_reg = {
         "abs_dx": [],
         "abs_dy": [],
         "abs_err": [],
-        "rel_dx": [],
-        "rel_dy": [],
-        "rel_err": [],
+        "slice": [],
+        "opt_z": [],
     }
     for i in range(len(physical_slices)):
-        # because dx,dy are slice to slice, the total displacement
-        # is the sum of all the previous
-        dx_t = np.sum(dx2[0: i + 1])
-        dy_t = np.sum(dy2[0: i + 1])
-        de_t = np.sqrt(np.sum(np.array(dd2[0: i + 1]) ** 2))
+        cube_reg["slice"].append(physical_slices[i])
+        cube_reg["opt_z"].append(float(optical_slices[i]))
 
-        cube_reg["abs_dx"].append(dx_t)
-        cube_reg["abs_dy"].append(dy_t)
-        cube_reg["abs_err"].append(de_t)
-
-        cube_reg["rel_dx"].append(dx2[i])
-        cube_reg["rel_dy"].append(dy2[i])
-        cube_reg["rel_err"].append(dd2[i])
+        cube_reg["abs_dx"].append(resx['x'][i])
+        cube_reg["abs_dy"].append(resy['x'][i])
+        cube_reg["abs_err"].append(abs_err[i])
 
     zarr_store.attrs["cube_reg"] = cube_reg
