@@ -402,9 +402,13 @@ def _image_stats(im, conf):
         Calculates the image statistics taking into account
         the confidence map
     """
-    mask = conf > 0
+    mask = conf >= 100
     pedestal = np.median(im[mask])
     # im_std = 1.48 * mad(im[mask], axis=None)
+    # im_std = 0.5 * (
+    #     np.percentile(im[mask].flatten(), 99) -
+    #     np.percentile(im[mask].flatten(), 1)
+    # )
     # std works better for NN
     im_std = im[mask].std()
     logger.debug("Img bgd: {0:.1f}, std: {1:.1f}".format(pedestal, im_std))
@@ -446,6 +450,42 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
     mos_zoom = xr.open_zarr(f"{mos_zarr}", group=f"l.{Settings.zoom_level}")
     bscale, bzero = mos_full.attrs['bscale'], mos_full.attrs['bzero']
 
+    # channel check
+    for this_slice in sections:
+
+        s = mos_zoom[this_slice].shape[-2:]
+
+        if this_slice == sections[0]:
+
+            mean_per_channel = (
+                mos_zoom[this_slice].sel(
+                    type="mosaic",
+                    y=np.arange(int(s[0] * 0.05), int(s[0] * 0.25)),
+                    x=np.arange(int(s[0] * 0.05), int(s[1] * 0.25)),
+                ).mean(dim=('x', 'y', 'z'))
+                * bscale + bzero
+            ).values
+        else:
+            mean_per_channel += (
+                mos_zoom[this_slice].sel(
+                    type="mosaic",
+                    y=np.arange(int(s[0] * 0.05), int(s[0] * 0.25)),
+                    x=np.arange(int(s[0] * 0.05), int(s[1] * 0.25)),
+                ).mean(dim=('x', 'y', 'z'))
+                * bscale + bzero
+            ).values
+
+    _str = ' '.join(['C{0:02d}: {1:.2f}'.format(
+        mos_zoom.channel.values[t], mean_per_channel[t]
+    ) for t in range(len(mean_per_channel))])
+    logger.debug('\t' + _str)
+
+    channels_for_beads = mos_zoom[
+        this_slice
+    ].channel.values[
+        mean_per_channel.argmax()
+    ]
+
     for this_slice in sections:
 
         first_bead = True
@@ -460,20 +500,19 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
 
             im = (
                 mos_zoom[this_slice]
-                .sel(z=this_optical, type="mosaic")
-                .mean(dim="channel")
+                .sel(z=this_optical, type="mosaic", channel=channels_for_beads)
             ) * bscale + bzero
 
-            conf = mos_zoom[this_slice].sel(
-                z=this_optical, channel=Settings.channel_to_use,
-                type="conf"
+            conf = (
+                mos_zoom[this_slice]
+                .sel(z=this_optical, type="conf", channel=channels_for_beads)
             )
 
             im_med, im_std = _image_stats(im.data, conf.data).compute()
             im_shape = im.shape
 
             # this is how the NN was trained
-            stage = np.clip((im - im_med) / im_std, -5, 5) / 5.
+            stage = np.clip((im - im_med) / im_std, -2, 2) / 2.
 
             mask = np.zeros(im_shape)
 
@@ -578,8 +617,9 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
 
             full_im = mos_full[this_slice].sel(
                 z=this_optical,
-                type="mosaic"
-            ).mean(dim='channel') * bscale + bzero
+                type="mosaic",
+                channel=channels_for_beads
+            ) * bscale + bzero
 
             logger.debug("Fitting full res beads...")
             all_beads = []

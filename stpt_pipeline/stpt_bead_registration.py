@@ -301,9 +301,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
                 logger.info(
                     '*** WARNING: Not enough beads in common between ' +
                     physical_slices[i - 1] +
-                    'Z{0:03d}'.fomat(optical_slices[i - 1]) +
+                    'Z{0:03d}'.format(optical_slices[i - 1]) +
                     physical_slices[i] +
-                    ' and Z{0:03d}'.fomat(optical_slices[i])
+                    ' and Z{0:03d}'.format(optical_slices[i])
                 )
                 # set desp to 0
                 dxt = dyt = dr = dr0 = 0

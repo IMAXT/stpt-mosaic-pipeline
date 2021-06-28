@@ -214,6 +214,7 @@ class Section:
 
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
+
         if self.cal_type == 'sample':
             xr_cal = xr.open_zarr(self.cal_zarr)
             flat = da.array(
@@ -965,6 +966,8 @@ class STPTMosaic:
     """
 
     def __init__(self, filename: Path):
+
+        # _ds points to the raw zarr
         self._ds = xr.open_zarr(f"{filename}")
 
         # this is to carry over the mosaic size between
@@ -979,14 +982,27 @@ class STPTMosaic:
         ds.attrs["raw_meta"] = [ds.attrs["raw_meta"]]
         ds.to_zarr(output / "mos.zarr", mode="w")
 
-    def sections(self):
-        """Sections generator"""
-        for section in self._ds:
-            yield Section(self._ds[section], self.stage_size)
-
     def section_labels(self):
         """Returns list of section labels"""
         return list(self._ds)
+
+    def sections(self, section_list=None):
+        """Sections generator"
+
+        Parameters
+        ----------
+        section_list
+            List of strings with section labels, if empty
+            returns all the sections
+        """
+
+        if section_list:
+            labels = section_list
+        else:
+            labels = self.section_labels()
+
+        for section in labels:
+            yield Section(self._ds[section], self.stage_size)
 
     def downsample(self, output: Path):
         """Downsample mosaic.

@@ -24,7 +24,7 @@ def _check_cals(cal_zarr_name: Path):
         _name = ''
         logger.info('Using static calibrations')
 
-    return _type, _name
+    return _name, _type
 
 
 @pipeline
@@ -54,12 +54,15 @@ def main(
 
     mos = STPTMosaic(root_dir)
 
-    if not(sections):
-        sections = mos.sections()
-        section_labels = mos.section_labels()
-
-    if reset:
+    # we check if new mosaic or restart
+    mos_zarr = output_dir_full / 'mos.zarr'
+    if (not mos_zarr.exists()) | reset:
         mos.initialize_storage(output_dir_full)
+
+    if not(sections):
+        section_labels = mos.section_labels()
+    else:
+        section_labels = sections
 
     if "cals" in recipes:
         _ = build_cals(mos._ds, output_dir_full)
@@ -74,7 +77,7 @@ def main(
             output_dir_full / 'cals.zarr'
         )
 
-        for section in sections:
+        for section in mos.sections(section_list=section_labels):
 
             section.cal_type = cal_type
             section.cal_zarr = cal_zarr_name
