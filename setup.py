@@ -15,12 +15,12 @@ requirements = [
     "zarr",
     "numpy",
     "cython",
-    "scipy>1.5",
+    "scipy>=1.5",
     "voluptuous",
     "xarray",
     "opencv-python",
     "owl-pipeline-develop",
-    "scikit-image",
+    "scikit-image>=0.18",
 ]
 
 setup_requirements = ["pytest-runner", "flake8"]
