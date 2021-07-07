@@ -56,7 +56,7 @@ def main(  # noqa: C901
 
     # we check if new mosaic or restart
     mos_zarr = output_dir_full / 'mos.zarr'
-    if (not mos_zarr.exists()) | reset:
+    if reset:
         mos.initialize_storage(output_dir_full)
 
     if not(sections):
