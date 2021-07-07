@@ -3,7 +3,7 @@ import dask.array as da
 import xarray as xr
 import zarr
 from dask import delayed
-from .local_log import to_log, to_debug
+from owl_dev.logging import logger
 from pathlib import Path
 import numpy as np
 
@@ -64,7 +64,7 @@ def build_cals(
     output_arr: Path
 ) -> Path:
 
-    to_log('Building flats...')
+    logger.debug('Building flats...')
 
     zarr_dir = output_arr / 'cals.zarr'
     _ = zarr.open(f"{zarr_dir}", mode="w")
@@ -84,7 +84,7 @@ def build_cals(
 
         this_channel = channels[i]
 
-        to_log('Building channel #' + str(this_channel))
+        logger.info('Building channel #' + str(this_channel))
 
         _imgs = []
         for this_slice in slices:
@@ -114,7 +114,7 @@ def build_cals(
         )[0]
 
         if len(flat_frames) < 10:
-            to_log(
+            logger.info(
                 'CH#' + str(channels[i]) +
                 ': Too few frames for good flat'
             )
@@ -124,14 +124,14 @@ def build_cals(
             temp = imgs[flat_frames, ].mean(axis=0).compute()
             flat_median = np.median(temp)
 
-            to_debug('Median flat c#{0:d} = {1:.3f}'.format(i, flat_median))
+            logger.debug('Median flat c#{0:d} = {1:.3f}'.format(i, flat_median))
 
             flats.append(temp / flat_median)
             flat_medians.append(flat_median)
             n_flats.append(len(flat_frames))
 
         if len(dark_frames) < 10:
-            to_log(
+            logger.info(
                 'CH#' + str(channels[i]) +
                 ': Too few frames for good dark'
             )
@@ -141,7 +141,7 @@ def build_cals(
             temp = da.median(imgs[dark_frames, ], axis=0).compute()
             dark_median = np.median(temp)
 
-            to_debug('Median dark c#{0:d} = {1:.3f}'.format(i, dark_median))
+            logger.debug('Median dark c#{0:d} = {1:.3f}'.format(i, dark_median))
 
             n_darks.append(len(dark_frames))
             darks.append(temp)
