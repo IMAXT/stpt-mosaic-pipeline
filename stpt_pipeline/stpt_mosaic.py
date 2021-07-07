@@ -982,10 +982,6 @@ class STPTMosaic:
         ds.attrs["raw_meta"] = [ds.attrs["raw_meta"]]
         ds.to_zarr(output / "mos.zarr", mode="w")
 
-    def section_labels(self):
-        """Returns list of section labels"""
-        return list(self._ds)
-
     def sections(self, section_list=None):
         """Sections generator"
 
@@ -995,11 +991,7 @@ class STPTMosaic:
             List of strings with section labels, if empty
             returns all the sections
         """
-
-        if section_list:
-            labels = section_list
-        else:
-            labels = self.section_labels()
+        labels = section_list or self._ds
 
         for section in labels:
             yield Section(self._ds[section], self.stage_size)

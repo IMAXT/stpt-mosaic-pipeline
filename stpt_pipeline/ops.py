@@ -60,11 +60,12 @@ def downsample(arr: xr.DataArray, type: str = "uint16") -> xr.DataArray:
 
 
 def build_cals(
-    arr: xr.DataArray,
+    mos: xr.DataArray,
     output_arr: Path
 ) -> Path:
 
     logger.debug('Building flats...')
+    arr = mos._ds
 
     zarr_dir = output_arr / 'cals.zarr'
     zarr.open(f"{zarr_dir}", mode="w")
