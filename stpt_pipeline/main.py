@@ -28,7 +28,7 @@ def _check_cals(cal_zarr_name: Path):
 
 
 @pipeline
-def main(
+def main(  # noqa: C901
     *,
     input_dir: Path,
     output_dir: Path,
@@ -36,7 +36,7 @@ def main(
     sections: List,
     reset: bool,
     cof_dist: Dict = None,
-) -> None:  # noqa: C901
+) -> None:
     """[summary]
 
     Parameters
