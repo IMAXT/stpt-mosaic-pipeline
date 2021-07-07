@@ -15,7 +15,7 @@ requirements = [
     "zarr",
     "numpy",
     "cython",
-    "scipy",
+    "scipy>1.5",
     "voluptuous",
     "xarray",
     "opencv-python",
