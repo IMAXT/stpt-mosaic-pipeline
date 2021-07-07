@@ -65,7 +65,7 @@ def main(  # noqa: C901
         section_labels = sections
 
     if "cals" in recipes:
-        _ = build_cals(mos._ds, output_dir_full)
+        build_cals(mos._ds, output_dir_full)
 
     if "mosaic" in recipes:
         if reset:

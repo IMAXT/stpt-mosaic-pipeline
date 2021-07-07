@@ -67,7 +67,7 @@ def build_cals(
     logger.debug('Building flats...')
 
     zarr_dir = output_arr / 'cals.zarr'
-    _ = zarr.open(f"{zarr_dir}", mode="w")
+    zarr.open(f"{zarr_dir}", mode="w")
 
     flats = []
     flat_medians = []
