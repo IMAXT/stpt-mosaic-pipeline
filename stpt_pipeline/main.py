@@ -54,8 +54,6 @@ def main(  # noqa: C901
 
     mos = STPTMosaic(root_dir)
 
-    # we check if new mosaic or restart
-    mos_zarr = output_dir_full / 'mos.zarr'
     if reset:
         mos.initialize_storage(output_dir_full)
 
