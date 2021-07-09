@@ -387,7 +387,7 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[0]) < 5000) & (abs(p[0] > 500) & (abs(a) > 0.5))
+                if (abs(p[0]) < 5000) and (abs(p[0] > 500) and (abs(a) > 0.5))
             ]
         )
         y_scale = np.median(
@@ -396,7 +396,7 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[1]) < 5000) & (abs(p[1] > 500) & (abs(a) > 0.5))
+                if (abs(p[1]) < 5000) and (abs(p[1] > 500) and (abs(a) > 0.5))
             ]
         )
 

@@ -45,7 +45,7 @@ def get_z(depth, r_bead, r):
 
     z[r <= r_bead] = depth - np.sqrt(r_bead**2 - r[r <= r_bead]**2)
 
-    if (depth >= -r_bead) & (depth <= r_bead):
+    if (depth >= -r_bead) and (depth <= r_bead):
 
         r_in = r_from_depth(depth, r_bead)
 

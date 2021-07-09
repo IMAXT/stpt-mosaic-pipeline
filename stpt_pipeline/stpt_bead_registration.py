@@ -293,7 +293,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         e_t = 0.01 * r_t
         e_r = 0.01 * r_r
 
-        if (len(x_t) > 0) & (len(x_r) > 0):
+        if (len(x_t) > 0) and (len(x_r) > 0):
 
             dxt, dyt, i_rt, i_tr = _match_cats(x_r, y_r, e_r, x_t, y_t, e_t)
 
