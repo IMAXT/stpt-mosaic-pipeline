@@ -590,7 +590,7 @@ class Section:
                             # In the first column the displacement
                             # is offset from the rest of the sample by an unknown
                             # amount, so it is better to keep what is in the mosaic
-                            if (dy0[ref_img] == 0.0) | (dy0[this_img] == 0.0):
+                            if (dy0[ref_img] == 0.0) or (dy0[this_img] == 0.0):
                                 default_desp[1] = (
                                     self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 )

@@ -113,9 +113,9 @@ def fit_2d(theta, im, x, y, conf):
 
     xc, yc, = theta[-2:]
 
-    if (xc < -10) | (xc > x.max() + 10):
+    if (xc < -10) or (xc > x.max() + 10):
         return np.inf
-    if (yc < -10) | (yc > y.max() + 10):
+    if (yc < -10) or (yc > y.max() + 10):
         return np.inf
 
     if theta[2] <= 0:
