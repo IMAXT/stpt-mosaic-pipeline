@@ -82,7 +82,7 @@ def get_bead_emission(depth, r_bead, bead_em, bgd_trans, r):
     return all_em
 
 
-def fit_2d(theta, im, x, y, conf, do_print):
+def fit_2d(theta, im, x, y, conf):
     """
         Fits a bead surface brightness profile to a
         bead image.
@@ -98,8 +98,6 @@ def fit_2d(theta, im, x, y, conf, do_print):
             x, y: pixel coordinates associated with the
                 values in im
             conf: confidence map associated with im
-            do_print: set to True, will print the fitting
-                parameters at each step
             theta: vector of parameters, as described in
                 get_bead_emission:
                 theta[0]: depth
@@ -130,12 +128,5 @@ def fit_2d(theta, im, x, y, conf, do_print):
     f_s = get_bead_emission(*theta[0:4], r) + theta[4]
     res = np.sum(conf * ((im - f_s)**2) / (np.abs(im) + 1.0)) / \
         np.sum(conf.astype(float))
-
-    if do_print:
-        out_str = ''
-        for t in theta:
-            out_str += '  {0:.3f}'.format(t)
-        out_str += '  {0:.3f}'.format(res)
-        logger.debug(out_str)
 
     return res

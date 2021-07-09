@@ -264,7 +264,6 @@ def _fit_bead_zoomed(cut_collection):
                 fit_im.values,
                 x2d, y2d,
                 fit_conf,
-                False
             ),
             method='Powell'
         )
@@ -360,7 +359,6 @@ def _fit_bead_full(cut_collection) -> dict:
                 fit_im.values,
                 x2d, y2d,
                 fit_conf,
-                False
             ),
             method='Powell'
         )
