@@ -1,5 +1,4 @@
 import numpy as np
-from owl_dev.logging import logger
 
 #
 # Bead fitting procedures
