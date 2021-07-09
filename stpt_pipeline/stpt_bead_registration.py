@@ -911,13 +911,8 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         "rel_dx": [],
         "rel_dy": [],
         "rel_err": [],
-        "slice": [],
-        "opt_z": [],
     }
     for i in range(len(physical_slices)):
-        cube_reg["slice"].append(physical_slices[i])
-        cube_reg["opt_z"].append(float(optical_slices[i]))
-
         # because dx,dy are slice to slice, the total displacement
         # is the sum of all the previous
         dx_t = np.sum(dx2[0 : i + 1])
