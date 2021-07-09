@@ -413,14 +413,14 @@ def _image_stats(im, conf):
     return pedestal, im_std
 
 
-def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
+def find_beads(mos_zarr: Path):  # noqa: C901
     """
     Finds all the beads in all the slices (physical and optical) in the
     zarr, and fits the bead profile.
 
     Attaches all the bead info as attrs to the zarr
     """
-
+    # TODO: most of this executed in the scheduler, i.e. without resources
     client = Client.current()
 
     # this is to store the beads later
@@ -449,34 +449,31 @@ def find_beads(mos_zarr: Path, sections: list):  # noqa: C901
     bscale, bzero = mos_full.attrs['bscale'], mos_full.attrs['bzero']
 
     # channel check
+    mean_per_channel = None
+    sections = list(mos_full)
     for this_slice in sections:
-
+        # TODO: The y and x are not guaranteed to be the last two dimensions
+        # and in that order. Get this from the metadata.
+        # e.g. sx = len(mos_zoom[this_slize].x.values)
         s = mos_zoom[this_slice].shape[-2:]
 
-        if this_slice == sections[0]:
-
-            mean_per_channel = (
-                mos_zoom[this_slice].sel(
-                    type="mosaic",
-                    y=np.arange(int(s[0] * 0.05), int(s[0] * 0.25)),
-                    x=np.arange(int(s[0] * 0.05), int(s[1] * 0.25)),
-                ).mean(dim=('x', 'y', 'z'))
-                * bscale + bzero
-            ).values
+        mean_channel = (
+            mos_zoom[this_slice].sel(
+                type="mosaic",
+                y=np.arange(int(s[0] * 0.05), int(s[0] * 0.25)),
+                x=np.arange(int(s[0] * 0.05), int(s[1] * 0.25)),
+            ).mean(dim=('x', 'y', 'z'))
+            * bscale + bzero
+        ).values
+        if mean_per_channel is None:
+            mean_per_channel = mean_channel
         else:
-            mean_per_channel += (
-                mos_zoom[this_slice].sel(
-                    type="mosaic",
-                    y=np.arange(int(s[0] * 0.05), int(s[0] * 0.25)),
-                    x=np.arange(int(s[0] * 0.05), int(s[1] * 0.25)),
-                ).mean(dim=('x', 'y', 'z'))
-                * bscale + bzero
-            ).values
+            mean_per_channel = mean_per_channel + mean_channel
 
     _str = ' '.join(['C{0:02d}: {1:.2f}'.format(
         mos_zoom.channel.values[t], mean_per_channel[t]
     ) for t in range(len(mean_per_channel))])
-    logger.debug('\t' + _str)
+    logger.debug(_str)
 
     channels_for_beads = mos_zoom[
         this_slice
