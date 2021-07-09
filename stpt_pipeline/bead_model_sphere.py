@@ -123,7 +123,7 @@ def fit_2d(theta, im, x, y, conf):
     if theta[3] <= 0:
         return np.inf
 
-    r = (np.sqrt((x - xc) ** 2 + (y - yc) ** 2))
+    r = np.sqrt((x - xc) ** 2 + (y - yc) ** 2)
 
     f_s = get_bead_emission(*theta[0:4], r) + theta[4]
     res = np.sum(conf * ((im - f_s)**2) / (np.abs(im) + 1.0)) / \
