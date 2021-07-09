@@ -982,18 +982,10 @@ class STPTMosaic:
         ds.attrs["raw_meta"] = [ds.attrs["raw_meta"]]
         ds.to_zarr(output / "mos.zarr", mode="w")
 
-    def sections(self, section_list=None):
+    def sections(self):
         """Sections generator"
-
-        Parameters
-        ----------
-        section_list
-            List of strings with section labels, if empty
-            returns all the sections
         """
-        labels = section_list or self._ds
-
-        for section in labels:
+        for section in self._ds:
             yield Section(self._ds[section], self.stage_size)
 
     def downsample(self, output: Path):

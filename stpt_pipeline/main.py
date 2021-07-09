@@ -59,11 +59,6 @@ def main(  # noqa: C901
     if reset:
         mos.initialize_storage(output_dir_full)
 
-    if not(sections):
-        section_labels = mos.section_labels()
-    else:
-        section_labels = sections
-
     if "cals" in recipes:
         build_cals(mos, output_dir_full)
 
@@ -77,7 +72,9 @@ def main(  # noqa: C901
             output_dir_full / 'cals.zarr'
         )
 
-        for section in mos.sections(section_list=section_labels):
+        for section in mos.sections():
+            if sections and (section.name not in sections):
+                continue
             section.cal_type = cal_type
             section.cal_zarr = cal_zarr_name
 
