@@ -21,6 +21,7 @@ requirements = [
     "opencv-python",
     "owl-pipeline-develop",
     "scikit-image>=0.18",
+    "keras",
 ]
 
 setup_requirements = ["pytest-runner", "flake8"]
