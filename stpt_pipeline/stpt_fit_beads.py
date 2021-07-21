@@ -13,7 +13,7 @@ from owl_dev.logging import logger
 from scipy.optimize import minimize
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 from distributed import Client, as_completed
 
 import warnings

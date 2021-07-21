@@ -21,7 +21,6 @@ requirements = [
     "opencv-python",
     "owl-pipeline-develop",
     "scikit-image>=0.18",
-    "keras",
     "tensorflow",
 ]
 
