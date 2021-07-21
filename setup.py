@@ -13,7 +13,7 @@ requirements = [
     "distributed",
     "imaxt-image",
     "zarr",
-    "numpy",
+    "numpy<1.20",
     "cython",
     "scipy>=1.5",
     "voluptuous",
