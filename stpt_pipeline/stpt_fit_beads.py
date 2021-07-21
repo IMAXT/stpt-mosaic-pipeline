@@ -545,7 +545,7 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                     j += 1
                 i += 1
 
-            im_temp = (mask > 0.1).astype(float)
+            im_temp = (mask > 0.1).astype(int)
             distance = ndi.distance_transform_edt(im_temp)
             coords = peak_local_max(
                 distance,
