@@ -28,8 +28,8 @@ def _check_cals(cal_zarr_name: Path):
     return _name, _type
 
 
-@pipeline
-def main(  # noqa: C901
+@pipeline  # noqa: C901
+def main(
     *,
     input_dir: Path,
     output_dir: Path,
