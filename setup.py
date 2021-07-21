@@ -22,6 +22,7 @@ requirements = [
     "owl-pipeline-develop",
     "scikit-image>=0.18",
     "keras",
+    "tensorflow",
 ]
 
 setup_requirements = ["pytest-runner", "flake8"]
