@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from owl_dev import pipeline
+from owl_dev.logging import logger
 from numcodecs import blosc
 
 from .settings import Settings
@@ -52,13 +53,13 @@ def main(  # noqa: C901
     if not input_dir.exists():
         raise FileNotFoundError(f"Directory {input_dir} does not exist.")
 
-    mos = STPTMosaic(root_dir)
+    mos = STPTMosaic(input_dir)
 
     if reset:
-        mos.initialize_storage(output_dir_full)
+        mos.initialize_storage(output_dir)
 
     if "cals" in recipes:
-        build_cals(mos, output_dir_full)
+        build_cals(mos, output_dir)
 
     if "mosaic" in recipes:
         if reset:
@@ -67,7 +68,7 @@ def main(  # noqa: C901
         # need to recheck because you can launch mosaic
         # without cals
         cal_zarr_name, cal_type = _check_cals(
-            output_dir_full / 'cals.zarr'
+            output_dir / 'cals.zarr'
         )
 
         for section in mos.sections():
@@ -85,7 +86,7 @@ def main(  # noqa: C901
     if "downsample" in recipes:
         mos.downsample(output_dir)
 
-    mos_dis = output_dir_full / "mos.zarr"
+    mos_dis = output_dir / "mos.zarr"
 
     if "beadfit" in recipes:
         find_beads(mos_dis)
