@@ -59,7 +59,7 @@ class Settings:
     """mosaic displacement units to pixel
     """
 
-    flat_file = "/data/meds1_a/eglez/imaxt/flat_dev.nc"
+    flat_file = "/data/meds1_a/eglez/imaxt/flat_20210322.nc"
     dark_file = "/data/meds1_a/eglez/imaxt/dark_dev.nc"
 
     # Settings for bead detection

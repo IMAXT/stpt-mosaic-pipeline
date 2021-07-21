@@ -19,7 +19,7 @@ cof_dist_schema = vo.Schema(
 
 schema = vo.Schema(
     {
-        vo.Required("root_dir"): vo.Coerce(Path),
+        vo.Required("input_dir"): vo.Coerce(Path),
         vo.Required("output_dir"): vo.Coerce(Path),
         vo.Required("recipes"): vo.All(list, check_recipes),
         vo.Optional("cof_dist"): cof_dist_schema,
