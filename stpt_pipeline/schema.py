@@ -2,10 +2,12 @@ from pathlib import Path
 
 import voluptuous as vo
 
-DEFAULT_RECIPES = ["mosaic", "downsample", "beadreg"]
+DEFAULT_RECIPES = ["cals", "mosaic", "downsample", "beadfit", "beadreg"]
 
 
 def check_recipes(val):
+    if len(val) == 1 and val[0] == "all":
+        val = DEFAULT_RECIPES
     for item in val:
         if item not in DEFAULT_RECIPES:
             raise vo.Invalid(f"Not a valid recipe {item!r}")

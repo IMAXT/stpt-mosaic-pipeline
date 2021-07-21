@@ -13,14 +13,16 @@ requirements = [
     "distributed",
     "imaxt-image",
     "zarr",
-    "numpy",
+    "numpy<1.20",
     "cython",
-    "scipy",
+    "scipy>=1.5",
     "voluptuous",
     "xarray",
     "opencv-python",
     "owl-pipeline-develop",
-    "scikit-image",
+    "scikit-image>=0.18",
+    "keras",
+    "tensorflow",
 ]
 
 setup_requirements = ["pytest-runner", "flake8"]

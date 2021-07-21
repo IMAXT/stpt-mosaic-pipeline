@@ -54,7 +54,8 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
         elif imgtype == "overlap":
             out[yslice, xslice] = out[yslice, xslice] + conf
         elif imgtype == "pos_err":
-            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(np.array(abs_err) ** 2)
+            out[yslice, xslice] = out[yslice, xslice] + \
+                conf * np.sum(np.array(abs_err) ** 2)
 
 
 class Section:
@@ -119,7 +120,8 @@ class Section:
                 if n == 0:
                     img_cube = self._section.sel(z=offset, channel=this_channel)
                 else:
-                    img_cube += self._section.sel(z=offset, channel=this_channel)
+                    img_cube += self._section.sel(z=offset,
+                                                  channel=this_channel)
                 n += 1.0
         else:
             img_cube = self._section.sel(z=offset, channel=channel)
@@ -183,8 +185,19 @@ class Section:
         return np.stack((dx, dy))
 
     def get_distconf(self):
-        flat = read_calib(Settings.flat_file)
-        flat = flat[Settings.channel_to_use - 1]
+
+        if self.cal_type == 'sample':
+            logger.info('Reading ' + self.cal_zarr.name)
+            xr_cal = xr.open_zarr(self.cal_zarr)
+            flat = da.array(
+                xr_cal['FLATS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
+        else:
+            flat = read_calib(Settings.flat_file)
+            flat = flat[Settings.channel_to_use - 1]
+
         conf = da.where((flat < 0.3) | (flat > 5), 0, 1)
         res = apply_geometric_transform(conf, 0.0, 1.0, Settings.cof_dist)
         return res.astype("uint8")
@@ -202,11 +215,24 @@ class Section:
         # Calculate confidence map. Only needs to be done once per section
         dist_conf = self.get_distconf()
 
-        flat = read_calib(Settings.flat_file)[Settings.channel_to_use - 1]
-        dark = (
-            read_calib(Settings.dark_file)[Settings.channel_to_use - 1]
-            / Settings.norm_val
-        )
+        if self.cal_type == 'sample':
+            xr_cal = xr.open_zarr(self.cal_zarr)
+            flat = da.array(
+                xr_cal['FLATS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
+            dark = da.array(
+                xr_cal['DARKS'].sel(
+                    channel=Settings.channel_to_use - 1
+                ).values
+            )
+        else:
+            flat = read_calib(Settings.flat_file)[Settings.channel_to_use - 1]
+            dark = (
+                read_calib(Settings.dark_file)[Settings.channel_to_use - 1]
+                / Settings.norm_val
+            )
 
         flat = flat.persist()
         dark = dark.persist()
@@ -247,7 +273,8 @@ class Section:
             self.offset_mode = "default"
 
         if self.mean_ref_img < 0.05:
-            logger.info("Avg. flux too low: {0:.3f}<0.05".format(self.mean_ref_img))
+            logger.info("Avg. flux too low: {0:.3f}<0.05".format(
+                self.mean_ref_img))
             self.offset_mode = "default"
 
         for i, img in enumerate(img_cube):
@@ -360,7 +387,7 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[0]) < 5000) & (abs(p[0] > 500) & (abs(a) > 0.5))
+                if (abs(p[0]) < 5000) and (abs(p[0] > 500) and (abs(a) > 0.5))
             ]
         )
         y_scale = np.median(
@@ -369,7 +396,7 @@ class Section:
                 for m, p, a in zip(
                     self._mu.values(), self._px.values(), self._avg.values()
                 )
-                if (abs(p[1]) < 5000) & (abs(p[1] > 500) & (abs(a) > 0.5))
+                if (abs(p[1]) < 5000) and (abs(p[1] > 500) and (abs(a) > 0.5))
             ]
         )
 
@@ -439,8 +466,10 @@ class Section:
             & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_x = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_x = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -450,8 +479,10 @@ class Section:
             & (avg_flux > np.max([np.median(avg_flux), 0.05]))
         )[0]
         default_y = [
-            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
-            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() / (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_y[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
+            (np.abs(px_x[ii]) * avg_flux[ii] ** 2).sum() /
+            (avg_flux[ii] ** 2).sum(),
         ]
         dev_y = np.sqrt(mad(px_x[ii]) ** 2 + mad(px_y[ii]) ** 2)
 
@@ -528,7 +559,8 @@ class Section:
 
                         if desp_grid_x ** 2 > desp_grid_y ** 2:
                             # x displacement
-                            default_desp = [-1.0 * default_x[0], -1.0 * default_x[1]]
+                            default_desp = [-1.0 *
+                                            default_x[0], -1.0 * default_x[1]]
                             if desp_grid_x < 0:
                                 default_desp = [default_x[0], default_x[1]]
                             # only differences in the long displacement
@@ -551,13 +583,14 @@ class Section:
                             )
 
                         else:
-                            default_desp = [-1.0 * default_y[0], -1.0 * default_y[1]]
+                            default_desp = [-1.0 *
+                                            default_y[0], -1.0 * default_y[1]]
                             if desp_grid_y < 0:
                                 default_desp = [default_y[0], default_y[1]]
                             # In the first column the displacement
                             # is offset from the rest of the sample by an unknown
                             # amount, so it is better to keep what is in the mosaic
-                            if (dy0[ref_img] == 0.0) | (dy0[this_img] == 0.0):
+                            if (dy0[ref_img] == 0.0) or (dy0[this_img] == 0.0):
                                 default_desp[1] = (
                                     self._mu[f"{ref_img}:{this_img}"][1] / scale_y
                                 )
@@ -587,18 +620,22 @@ class Section:
                     ):
                         # Dimensions in the mosaic and images have opposite directions
                         temp_pos[0].append(
-                            abs_pos[ref_img, 0] + self._px[f"{ref_img}:{this_img}"][0]
+                            abs_pos[ref_img, 0] +
+                            self._px[f"{ref_img}:{this_img}"][0]
                         )
                         temp_pos[1].append(
-                            abs_pos[ref_img, 1] + self._px[f"{ref_img}:{this_img}"][1]
+                            abs_pos[ref_img, 1] +
+                            self._px[f"{ref_img}:{this_img}"][1]
                         )
                         # weights
                         weight.append(self._avg[f"{ref_img}:{this_img}"] ** 2)
                         temp_qual.append(pos_quality[ref_img])
                         prov_im.append(ref_img)
                     else:
-                        temp_pos[0].append(abs_pos[ref_img, 0] + default_desp[0])
-                        temp_pos[1].append(abs_pos[ref_img, 1] + default_desp[1])
+                        temp_pos[0].append(
+                            abs_pos[ref_img, 0] + default_desp[0])
+                        temp_pos[1].append(
+                            abs_pos[ref_img, 1] + default_desp[1])
                         weight.append(0.0000001 ** 2)  # artificially low weight
                         temp_qual.append(0.0)
                         prov_im.append(-1.0 * ref_img)
@@ -606,10 +643,12 @@ class Section:
                 weight = np.array(weight)
 
                 abs_pos[this_img, 0] = int(
-                    np.round((np.array(temp_pos[0]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[0]) * weight).sum() / weight.sum())
                 )
                 abs_pos[this_img, 1] = int(
-                    np.round((np.array(temp_pos[1]) * weight).sum() / weight.sum())
+                    np.round(
+                        (np.array(temp_pos[1]) * weight).sum() / weight.sum())
                 )
 
                 # this image has been fixed
@@ -694,7 +733,8 @@ class Section:
         )[0]
         if len(ind_temp) > 3:
             elongx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
-            eshorty = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
+            eshorty = 1.48 * \
+                mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
         else:
             elongx = 10
             eshorty = 10
@@ -704,7 +744,8 @@ class Section:
         )[0]
         if len(ind_temp) > 3:
             elongy = 1.48 * mad(np.sqrt((px_y_temp - mu_y_temp)[ind_temp] ** 2))
-            eshortx = 1.48 * mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
+            eshortx = 1.48 * \
+                mad(np.sqrt((px_x_temp - mu_x_temp)[ind_temp] ** 2))
         else:
             elongy = 10.0
             eshortx = 10.0
@@ -741,7 +782,8 @@ class Section:
             # adding quality of global reference
             accumulated_qual.append(
                 np.sqrt(
-                    np.array(temp[1]) ** 2 + np.array(temp[1])[absolute_ref_img] ** 2
+                    np.array(temp[1]) ** 2 +
+                    np.array(temp[1])[absolute_ref_img] ** 2
                 )
             )
 
@@ -758,8 +800,14 @@ class Section:
         logger.info("Creating temporary mosaic")
         z = zarr.open(f"{output}/{self.name}.zarr", mode="w")
 
-        flat = read_calib(Settings.flat_file)
-        dark = read_calib(Settings.dark_file) / Settings.norm_val
+        if self.cal_type == 'sample':
+            cal_xr = xr.open_zarr(self.cal_zarr)
+            flat = da.array(cal_xr['FLATS'].values)
+            dark = da.array(cal_xr['DARKS'].values)
+        else:
+            flat = read_calib(Settings.flat_file)
+            dark = read_calib(Settings.dark_file) / Settings.norm_val
+
         cof_dist = Settings.cof_dist
         y_delta, x_delta = np.min(abs_pos, axis=0)
 
@@ -771,13 +819,15 @@ class Section:
 
                 im_dis = [
                     apply_geometric_transform(
-                        im.data / Settings.norm_val, dark[ch], flat[ch], cof_dist
+                        im.data /
+                        Settings.norm_val, dark[ch], flat[ch], cof_dist
                     )
                     for im in im_t
                 ]
 
                 for imgtype in ["raw", "pos_err", "overlap"]:
-                    nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
+                    nimg = _get_image(
+                        g, imgtype, self.stage_size, dtype="float32")
 
                     for i in range(len(im_dis)):
                         y0 = int(abs_pos[i, 0] - y_delta)
@@ -812,11 +862,13 @@ class Section:
 
             raw = (raw - Settings.bzero) / Settings.bscale
             overlap = (
-                da.stack([da.from_zarr(ch["overlap"]) for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["overlap"])
+                          for name, ch in offset.groups()])
                 * 100
             )
             err = (
-                da.stack([da.from_zarr(ch["pos_err"]) for name, ch in offset.groups()])
+                da.stack([da.from_zarr(ch["pos_err"])
+                          for name, ch in offset.groups()])
                 * 100
             )
             mos_overlap.append(overlap)
@@ -825,7 +877,8 @@ class Section:
         mos_raw = da.stack(mos_raw)
         mos_overlap = da.stack(mos_overlap)
         mos_err = da.stack(mos_err)
-        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk((1, 1, 10, CHUNK_SIZE, CHUNK_SIZE))
+        mos = da.stack([mos_raw, mos_overlap, mos_err]).rechunk(
+            (1, 1, 10, CHUNK_SIZE, CHUNK_SIZE))
         nt, nz, nch, ny, nx = mos.shape
 
         raw = xr.DataArray(
@@ -913,6 +966,8 @@ class STPTMosaic:
     """
 
     def __init__(self, filename: Path):
+
+        # _ds points to the raw zarr
         self._ds = xr.open_zarr(f"{filename}")
 
         # this is to carry over the mosaic size between
@@ -928,7 +983,8 @@ class STPTMosaic:
         ds.to_zarr(output / "mos.zarr", mode="w")
 
     def sections(self):
-        """Sections generator"""
+        """Sections generator"
+        """
         for section in self._ds:
             yield Section(self._ds[section], self.stage_size)
 

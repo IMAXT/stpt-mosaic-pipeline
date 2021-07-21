@@ -1,17 +1,6 @@
 import numpy as np
 from scipy.special import factorial
 
-#
-# Bead fitting procedures
-#
-
-
-def print_theta(theta):
-    s = ""
-    for i in theta:
-        s += "{0:.3f} ".format(i)
-    return s
-
 
 def sigmoid(r, rt, c):
     return 1.0 - 1.0 / (1.0 + np.exp(-c * (r ** 2 - rt ** 2)))
@@ -27,7 +16,7 @@ def bead_profile_supergaussian(x, y, x0, y0, p, s, c):
     return p * np.exp(-(((r / s) ** 2) ** c))
 
 
-def neg_log_like_conf(theta, xx, yy, zz, conf, do_full=False, do_print=False):
+def neg_log_like_conf(theta, xx, yy, zz, conf, do_full=False):
     x0, y0, p, s, c = theta
     if x0 < -10:
         return np.inf
@@ -44,8 +33,5 @@ def neg_log_like_conf(theta, xx, yy, zz, conf, do_full=False, do_print=False):
 
     if do_full:
         ll -= np.log(factorial(1.0 + zz))
-
-    if do_print:
-        print(print_theta(theta), np.nansum(ll))
 
     return -1.0 * np.nansum(ll)
