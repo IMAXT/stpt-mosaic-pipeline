@@ -95,6 +95,8 @@ def main(
                 section.stitch(output_dir)
                 mos.stage_size = section.stage_size
 
+        mos.store_metadata(output_dir)
+
     if "downsample" in recipes:
         # Can we skip this if already done and reset is False --> Carlos
         restart_workers()

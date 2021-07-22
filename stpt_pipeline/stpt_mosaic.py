@@ -1,9 +1,10 @@
+import os
 import shutil
 from pathlib import Path
 from typing import List, Tuple
 import time
 
-
+import json
 import cv2
 import dask
 import dask.array as da
@@ -12,10 +13,12 @@ import xarray as xr
 import zarr
 from numcodecs import blosc
 from dask import delayed
+from datetime import datetime
 from distributed import Client, as_completed, Lock
 from imaxt_image.registration import find_overlap_conf
 from owl_dev.logging import logger
 from scipy.stats import median_absolute_deviation as mad
+import stpt_pipeline
 
 from . import ops
 from .geometric_distortion import apply_geometric_transform, read_calib
@@ -876,14 +879,24 @@ class Section:
         return raw
 
     def _get_metadata(self):
+        raw = self._section.attrs.get("raw_meta")
+        if isinstance(raw, list):
+            raw = raw[0]
+
         metadata = {
-            "default_displacements": self._section.attrs["default_displacements"],
-            "abs_pos": self._section.attrs["abs_pos"],
-            "abs_err": self._section.attrs["abs_err"],
-            "offsets": self._offsets,
-            "scale": [self._x_scale, self._y_scale],
+            # "default_displacements": self._section.attrs["default_displacements"],
+            # "abs_pos": self._section.attrs["abs_pos"],
+            # "abs_err": self._section.attrs["abs_err"],
+            # "offsets": self._offsets,
+            "scale": json.dumps(
+                {"x": self._x_scale / 10, "y": self._y_scale / 10, "z": raw.get("zres")}
+            ),
+            "thickness": raw.get("sectionres"),
             "offset_mode": self.offset_mode,
-            "raw_meta": [self._section.attrs.get("raw_meta")],
+            "raw_meta": json.dumps(raw),
+            "bscale": Settings.bscale,
+            "bzero": Settings.bzero,
+            "level": 1,
         }
         return metadata
 
@@ -951,7 +964,7 @@ class STPTMosaic:
     """
 
     def __init__(self, filename: Path):
-
+        self.filename = filename
         # _ds points to the raw zarr
         self._ds = xr.open_zarr(f"{filename}")
 
@@ -996,10 +1009,18 @@ class STPTMosaic:
                 nds = xr.Dataset()
                 logger.debug("Downsampling mos%d [%s]", factor, s)
                 narr = ops.downsample(ds[s])
+                narr.attrs = ds[s].attrs
+                scale = json.loads(narr.attrs["scale"])
+                level = narr.attrs["level"]
+                scale["x"] = scale["x"] * factor / level
+                scale["y"] = scale["y"] * factor / level
+                narr.attrs["level"] = factor
+                narr.attrs["scale"] = json.dumps(scale)
                 nds[s] = narr
 
                 for retries in range(10):
                     try:
+                        nds.attrs = ds.attrs
                         nds.to_zarr(store, mode="a", group=down)
                         break
                     except Exception:
@@ -1010,17 +1031,30 @@ class STPTMosaic:
 
             logger.info("Downsampled mosaic saved %s:%s", store_name, down)
             up = down
+
+    def store_metadata(self, output):
+        store_name = output / "mos.zarr"
         arr = zarr.open(f"{store_name}", mode="r+")
-        arr.attrs["multiscale"] = {
-            "datasets": [
-                {"path": "", "level": 1},
-                {"path": "l.2", "level": 2},
-                {"path": "l.4", "level": 4},
-                {"path": "l.8", "level": 8},
-                {"path": "l.16", "level": 16},
-                {"path": "l.32", "level": 32},
-            ],
-            "metadata": {"method": "cv2.pyrDown", "version": cv2.__version__},
-        }
-        arr.attrs["bscale"] = Settings.bscale
-        arr.attrs["bzero"] = Settings.bzero
+        arr.attrs["version"] = "1.0"
+        arr.attrs["jobid"] = os.getenv("UID") or 0
+        arr.attrs["software"] = json.dumps(
+            {
+                "name": "stpt-mosaic-pipeline",
+                "version": stpt_pipeline.__version__,
+            }
+        )
+        arr.attrs["timestamp"] = datetime.now().astimezone().isoformat()
+        arr.attrs["origname"] = self.filename.name
+        arr.attrs["multiscale"] = json.dumps(
+            {
+                "datasets": [
+                    {"path": "", "level": 1},
+                    {"path": "l.2", "level": 2},
+                    {"path": "l.4", "level": 4},
+                    {"path": "l.8", "level": 8},
+                    {"path": "l.16", "level": 16},
+                    {"path": "l.32", "level": 32},
+                ],
+                "metadata": {"method": "cv2.pyrDown", "version": cv2.__version__},
+            }
+        )

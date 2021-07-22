@@ -37,23 +37,23 @@ class bead_collection:
 
     def add_bead(self, x_cor, y_cor, x_raw, y_raw, z, r_m, b_id):
         """
-            Adds a bead to the collection, and matches with
-            average coordinates
+        Adds a bead to the collection, and matches with
+        average coordinates
 
-            Parameters
-            ----------
-            x_cor, y_cor: coordinates corrected from slice displacement,
-                if available.
-            x_raw, y_raw: uncorrected coordinates.
-            z: optical slice
-            r_m: mask radius
-            b_id: unique bead id
+        Parameters
+        ----------
+        x_cor, y_cor: coordinates corrected from slice displacement,
+            if available.
+        x_raw, y_raw: uncorrected coordinates.
+        z: optical slice
+        r_m: mask radius
+        b_id: unique bead id
         """
 
         if len(self.x) == 0:
-            r = np.array([self.critical_radius * 10.])
+            r = np.array([self.critical_radius * 10.0])
         else:
-            r = np.sqrt((x_cor - self.x)**2 + (y_cor - self.y)**2)
+            r = np.sqrt((x_cor - self.x) ** 2 + (y_cor - self.y) ** 2)
 
         if r.min() < self.critical_radius:
             self.x_list[r.argmin()].append(x_cor)
@@ -82,7 +82,7 @@ class bead_collection:
 
     def update_coords(self):
         """
-            Recalculates the average coordinates for the beads
+        Recalculates the average coordinates for the beads
         """
         for i in range(len(self.id)):
             if self.n[i] > 1:
@@ -94,13 +94,13 @@ class bead_collection:
 
 def _get_beads(slice_obj, z_val):
 
-    z = np.array(slice_obj['bead_z'][:])
+    z = np.array(slice_obj["bead_z"][:])
     i_t = np.where(z == z_val)
 
-    xc = np.array(slice_obj['bead_x'][:])[i_t]
-    yc = np.array(slice_obj['bead_y'][:])[i_t]
-    r_img = np.array(slice_obj['mask_rad'][:])[i_t]
-    ind = np.array(slice_obj['bead_id'][:])[i_t]
+    xc = np.array(slice_obj["bead_x"][:])[i_t]
+    yc = np.array(slice_obj["bead_y"][:])[i_t]
+    r_img = np.array(slice_obj["mask_rad"][:])[i_t]
+    ind = np.array(slice_obj["bead_id"][:])[i_t]
 
     return ind, xc, yc, r_img
 
@@ -130,24 +130,21 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
         i_ls = []
         r_sl = []
         for i in range(len(xs)):
-            r = np.sqrt((xl - xs[i] - dx)**2 + (yl - ys[i] - dy)**2)
+            r = np.sqrt((xl - xs[i] - dx) ** 2 + (yl - ys[i] - dy) ** 2)
             r_sl.append(r.min())
             i_sl.append(i)
             i_ls.append(r.argmin())
         r_sl = np.array(r_sl)
         # combined error
-        e_c = np.sqrt(el[i_ls]**2 + es[i_sl]**2)
+        e_c = np.sqrt(el[i_ls] ** 2 + es[i_sl] ** 2)
 
         # only 3sigma matches
-        ii = np.where(r_sl - np.median(r_sl) < 3. *
-                      1.48 * mad(r_sl, axis=None))[0]
+        ii = np.where(r_sl - np.median(r_sl) < 3.0 * 1.48 * mad(r_sl, axis=None))[0]
         dx = np.median((xl[i_ls] - xs[i_sl])[ii])
         dy = np.median((yl[i_ls] - ys[i_sl])[ii])
 
     if errors:
-        ex = np.sqrt(
-            1. / np.sum(1. / e_c**2)
-        )
+        ex = np.sqrt(1.0 / np.sum(1.0 / e_c ** 2))
         if len(xr) > len(xt):
             return dx, dy, ex, i_ls, i_sl
         else:
@@ -160,15 +157,15 @@ def _match_cats(xr, yr, er, xt, yt, et, errors=False):
 
 def _prefilter_beads(xb, yb, x_cat, y_cat):
     """
-        Before adding beads to a bead collection, checks if
-        any pair of beads would match to the same object from
-        the collection, and selects the closest.
+    Before adding beads to a bead collection, checks if
+    any pair of beads would match to the same object from
+    the collection, and selects the closest.
     """
 
     ib = []
     rb = []
     for i in range(len(xb)):
-        r = np.sqrt((xb[i] - x_cat)**2 + (yb[i] - y_cat)**2)
+        r = np.sqrt((xb[i] - x_cat) ** 2 + (yb[i] - y_cat) ** 2)
         ib.append(np.argmin(r))
         rb.append(np.min(r))
     ib = np.array(ib)
@@ -193,9 +190,9 @@ def _prefilter_beads(xb, yb, x_cat, y_cat):
 
 def _shift_func(x, A, At, d, mat_var):
     """
-        Calculates the difference between the
-        bead displacements according to shift vectors
-        and the measured values
+    Calculates the difference between the
+    bead displacements according to shift vectors
+    and the measured values
     """
     #
     temp_dif = d - A.dot(x)
@@ -210,8 +207,8 @@ def _shift_func(x, A, At, d, mat_var):
 
 def _build_collection(mos_zarr, dx, dy, physical, optical):
     """
-        Builds a bead collection from the beads on
-        a zarr metadata and the calculated displacements
+    Builds a bead collection from the beads on
+    a zarr metadata and the calculated displacements
     """
 
     bb = bead_collection()
@@ -222,9 +219,7 @@ def _build_collection(mos_zarr, dx, dy, physical, optical):
         dx_t = dx[i]
         dy_t = dy[i]
 
-        ind_r, x_r, y_r, r_r = _get_beads(
-            mos_zarr[physical[i]].attrs, optical[i]
-        )
+        ind_r, x_r, y_r, r_r = _get_beads(mos_zarr[physical[i]].attrs, optical[i])
         id_str = []
         for this_id in ind_r:
             id_str.append(ref_slice + ":{0:05d}".format(int(this_id)))
@@ -239,10 +234,11 @@ def _build_collection(mos_zarr, dx, dy, physical, optical):
             bb.add_bead(
                 x_r[j] + dx_t,
                 y_r[j] + dy_t,
-                x_r[j], y_r[j],
+                x_r[j],
+                y_r[j],
                 optical[i],
                 r_r[j],
-                id_str[j]
+                id_str[j],
             )
 
         # at each slice we check matching beads and update avg coords
@@ -257,16 +253,13 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     and calculates an average displacement so that all
     slices are matched to the first one
     """
-    # this is to store the beads later
-    zarr_store = zarr.open(f"{mos_zarr}", mode="a")
 
-    mos_full = xr.open_zarr(f"{mos_zarr}", group="")
-    _slices = list(mos_full)
+    mos_full = xr.open_zarr(f"{mos_zarr}")
 
     # putting all slices on a single list
     optical_slices = []
     physical_slices = []
-    for this_slice in _slices:
+    for this_slice in list(mos_full):
         for this_optical in mos_full[this_slice].z.values:
             physical_slices.append(this_slice)
             optical_slices.append(this_optical)
@@ -299,30 +292,31 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
             if len(i_rt) < 3:
                 logger.info(
-                    '*** WARNING: Not enough beads in common between ' +
-                    physical_slices[i - 1] +
-                    'Z{0:03d}'.format(optical_slices[i - 1]) +
-                    physical_slices[i] +
-                    ' and Z{0:03d}'.format(optical_slices[i])
+                    "*** WARNING: Not enough beads in common between "
+                    + physical_slices[i - 1]
+                    + "Z{0:03d}".format(optical_slices[i - 1])
+                    + physical_slices[i]
+                    + " and Z{0:03d}".format(optical_slices[i])
                 )
                 # set desp to 0
                 dxt = dyt = dr = dr0 = 0
 
             else:
                 dr = np.sqrt(
-                    (y_r[i_rt] - y_t[i_tr] - dyt) ** 2 +
-                    (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
+                    (y_r[i_rt] - y_t[i_tr] - dyt) ** 2
+                    + (x_r[i_rt] - x_t[i_tr] - dxt) ** 2
                 )
-                dr0 = np.sqrt((y_r[i_rt] - y_t[i_tr]) ** 2 +
-                              (x_r[i_rt] - x_t[i_tr]) ** 2)
+                dr0 = np.sqrt(
+                    (y_r[i_rt] - y_t[i_tr]) ** 2 + (x_r[i_rt] - x_t[i_tr]) ** 2
+                )
 
         else:
             logger.info(
-                '*** WARNING: Not enough beads in ' +
-                physical_slices[i - 1] +
-                'Z{0:03d}'.fomat(optical_slices[i - 1]) +
-                physical_slices[i] +
-                ' or Z{0:03d}'.fomat(optical_slices[i])
+                "*** WARNING: Not enough beads in "
+                + physical_slices[i - 1]
+                + "Z{0:03d}".fomat(optical_slices[i - 1])
+                + physical_slices[i]
+                + " or Z{0:03d}".fomat(optical_slices[i])
             )
             i_tr = []
             dxt = dyt = dr = dr0 = 0
@@ -330,7 +324,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         dx.append(dxt)
         dy.append(dyt)
         logger.info(
-            '\t'
+            "\t"
             + physical_slices[i - 1]
             + "_Z{0:03d}:".format(optical_slices[i - 1])
             + physical_slices[i]
@@ -345,13 +339,10 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
     # because dx,dy are slice to slice, the total displacement
     # is the sum of all the previous
-    abs_dx = np.array([np.sum(dx[0:t + 1]) for t in range(len(dx))])
-    abs_dy = np.array([np.sum(dy[0:t + 1]) for t in range(len(dy))])
+    abs_dx = np.array([np.sum(dx[0 : t + 1]) for t in range(len(dx))])
+    abs_dy = np.array([np.sum(dy[0 : t + 1]) for t in range(len(dy))])
 
-    bb = _build_collection(
-        mos_full, abs_dx, abs_dy,
-        physical_slices, optical_slices
-    )
+    bb = _build_collection(mos_full, abs_dx, abs_dy, physical_slices, optical_slices)
 
     # For the 2nd pass, we calculate the shifts taking all beads into
     # account.
@@ -377,9 +368,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         _y = bb.y_list_raw[i]
         _id = bb.id_list[i]
         # the z value takes into account physical and optical
-        _z = [
-            (float(t[1:4]) - 1) * n_op + float(t[6:9]) for t in _id
-        ]
+        _z = [(float(t[1:4]) - 1) * n_op + float(t[6:9]) for t in _id]
         _e = 0.01 * np.array(bb.r_mask[i])
         for j in range(1, len(_z)):
             xi.append(row_counter)
@@ -392,7 +381,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
             dx.append(_x[j] - _x[j - 1])
             dy.append(_y[j] - _y[j - 1])
-            ex.append(np.sqrt(_e[j]**2 + _e[j - 1]**2))
+            ex.append(np.sqrt(_e[j] ** 2 + _e[j - 1] ** 2))
 
             row_counter += 1
         # adding last minus first
@@ -406,7 +395,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
 
         dx.append(_x[0] - _x[-1])
         dy.append(_y[0] - _y[-1])
-        ex.append(10.)
+        ex.append(10.0)
 
         row_counter += 1
 
@@ -423,30 +412,41 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             x0 = np.zeros(int(np.max(yi)) + 1)
             y0 = np.zeros(int(np.max(yi)) + 1)
 
-        dr = (dx - mat.dot(x0))**2 + (dy - mat.dot(y0))**2
-        std = 10.
+        dr = (dx - mat.dot(x0)) ** 2 + (dy - mat.dot(y0)) ** 2
+        std = 10.0
         ii = np.where(dr < (13 - i) * std)[0]
 
         mat_0 = mat.tocsr()[ii]
         mat_0_t = mat_0.T
-        mat_var = dia_matrix((ex[ii]**(-2), 0), shape=(len(ii), len(ii)))
+        mat_var = dia_matrix((ex[ii] ** (-2), 0), shape=(len(ii), len(ii)))
         dx_t = dx[ii]
         dy_t = dy[ii]
 
-        resx = op.minimize(_shift_func, x0, args=(mat_0, mat_0_t, dx_t, mat_var),
-                           method='L-BFGS-B', jac=True, options={'disp': False})
-        resy = op.minimize(_shift_func, y0, args=(mat_0, mat_0_t, dy_t, mat_var),
-                           method='L-BFGS-B', jac=True, options={'disp': False})
+        resx = op.minimize(
+            _shift_func,
+            x0,
+            args=(mat_0, mat_0_t, dx_t, mat_var),
+            method="L-BFGS-B",
+            jac=True,
+            options={"disp": False},
+        )
+        resy = op.minimize(
+            _shift_func,
+            y0,
+            args=(mat_0, mat_0_t, dy_t, mat_var),
+            method="L-BFGS-B",
+            jac=True,
+            options={"disp": False},
+        )
 
-        x0 = resx['x']
-        y0 = resy['x']
+        x0 = resx["x"]
+        y0 = resy["x"]
 
     # to get an estimation of the errors, we update our bead collection
     # with the new displacements
 
     bb = _build_collection(
-        mos_full, resx['x'], resy['x'],
-        physical_slices, optical_slices
+        mos_full, resx["x"], resy["x"], physical_slices, optical_slices
     )
 
     # now for each slice, we get the average radial offset from the beads
@@ -461,36 +461,37 @@ def register_slices(mos_zarr: Path):  # noqa: C901
         _dr = []
         for j in range(len(x_r)):
             r = np.sqrt(
-                (x_r[j] + resx['x'][i] - bb.x)**2 +
-                (y_r[j] + resy['x'][i] - bb.y)**2
+                (x_r[j] + resx["x"][i] - bb.x) ** 2
+                + (y_r[j] + resy["x"][i] - bb.y) ** 2
             )
             _dr.append(r.min())
 
         abs_err.append(np.median(np.array(_dr)))
 
-        ref_slice = '\t' + physical_slices[i] + \
-            "_Z{0:03d}: ".format(optical_slices[i])
+        ref_slice = "\t" + physical_slices[i] + "_Z{0:03d}: ".format(optical_slices[i])
         logger.info(
             ref_slice
-            + "{0:.1f} ".format(resx['x'][i])
-            + "{0:.1f} ".format(resy['x'][i])
+            + "{0:.1f} ".format(resx["x"][i])
+            + "{0:.1f} ".format(resy["x"][i])
             + "{0:.1f} ".format(abs_err[-1])
         )
 
-    # Now we store all the displacements as attrs
-    cube_reg = {
-        "abs_dx": [],
-        "abs_dy": [],
-        "abs_err": [],
-        "slice": [],
-        "opt_z": [],
-    }
     for i in range(len(physical_slices)):
-        cube_reg["slice"].append(physical_slices[i])
-        cube_reg["opt_z"].append(float(optical_slices[i]))
+        zarr_store = zarr.open(f"{mos_zarr}/{physical_slices[i]}", mode="a")
 
-        cube_reg["abs_dx"].append(resx['x'][i])
-        cube_reg["abs_dy"].append(resy['x'][i])
-        cube_reg["abs_err"].append(abs_err[i])
-
-    zarr_store.attrs["cube_reg"] = cube_reg
+    ns = len(mos_full)
+    nz = len(mos_full.z)
+    physical_slices = physical_slices[::nz]
+    abs_dx = [resx["x"][i : i + nz] for i in range(ns * nz)][::nz]
+    abs_dy = [resy["x"][i : i + nz] for i in range(ns * nz)][::nz]
+    abs_err = [abs_err[i : i + nz] for i in range(ns * nz)][::nz]
+    for i in range(ns):
+        zarr_store = zarr.open(f"{mos_zarr}/{physical_slices[i]}", mode="a")
+        offset_x, offset_y, offset_err = (
+            list(abs_dx[i]),
+            list(abs_dy[i]),
+            list(abs_err[i]),
+        )
+        if nz == 1:
+            offset_x, offset_y, offset_err = offset_x[0], offset_y[0], offset_err[0]
+        zarr_store.attrs["offsets"] = {"x": offset_x, "y": offset_y, "err": offset_err}
