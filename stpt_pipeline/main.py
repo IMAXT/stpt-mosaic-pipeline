@@ -18,13 +18,13 @@ blosc.use_threads = False
 def _check_cals(cal_zarr_name: Path):
 
     if cal_zarr_name.is_dir():
-        _type = 'sample'
+        _type = "sample"
         _name = cal_zarr_name
-        logger.info('Using sample calibrations')
+        logger.info("Using sample calibrations")
     else:
-        _type = 'static'
-        _name = ''
-        logger.info('Using static calibrations')
+        _type = "static"
+        _name = ""
+        logger.info("Using static calibrations")
 
     return _name, _type
 
