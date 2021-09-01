@@ -42,7 +42,7 @@ setup(
         "Programming Language :: Python :: 3.10",
     ],
     description="STPT pipeline.",
-    entry_points={"owl.pipelines": "stpt = stpt_pipeline"},
+    entry_points={"owl.pipelines": "stptdev = stpt_pipeline"},
     install_requires=requirements,
     license="GNU General Public License v3",
     long_description=readme + "\n\n" + history,
