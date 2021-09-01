@@ -1,0 +1,26 @@
+# Version of the configuration file
+version: 1.1
+
+# Name of the pipeline
+sig:extra_pip_packages: stpt-pipeline
+sig:active: true
+
+name: stpt
+
+input_dir: /storage/raw/stpt/20210105_PDX_STG316_GFP_rep1_100x15um
+output_dir: /storage/processed/stpt/20210105_PDX_STG316_GFP_rep1_100x15um
+
+recipes: ["all"]
+
+# Sections to process
+# sections: []
+
+# Set to false to continue stopped run
+# reset: true
+
+# Resources requested
+resources:
+  threads: 10
+  workers: 3
+  memory: 30
+

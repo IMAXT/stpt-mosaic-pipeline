@@ -47,7 +47,6 @@ setup(
     license="GNU General Public License v3",
     long_description=readme + "\n\n" + history,
     include_package_data=True,
-    data_files=[("conf", ["conf/stpt_pipeline.yaml"])],
     keywords="stpt_pipeline",
     name="stpt_pipeline",
     packages=find_packages(include=["stpt_pipeline"]),
@@ -62,6 +61,5 @@ setup(
     zip_safe=False,
     dependency_links=[
         "https://imaxt.ast.cam.ac.uk/pip/imaxt-image",
-        "https://imaxt.ast.cam.ac.uk/pip/owl-pipeline-develop",
     ],
 )
