@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 from typing import List, Tuple
+import time
+
 
 import cv2
 import dask
@@ -8,6 +10,7 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 import zarr
+from numcodecs import blosc
 from dask import delayed
 from distributed import Client, as_completed, Lock
 from imaxt_image.registration import find_overlap_conf
@@ -22,10 +25,7 @@ from .settings import Settings
 
 CHUNK_SIZE = 2080
 
-
-@delayed
-def _sink(*args):
-    return args
+blosc.use_threads = False
 
 
 @retry(Exception)
@@ -48,14 +48,18 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     xslice = slice(x0, x0 + im.shape[1])
 
     lock_name = f"{imgtype}-{ch}"
+    logger.debug("Trying to acquire lock %s", lock_name)
     with Lock(lock_name):
+        logger.debug("Lock %s acquired", lock_name)
         if imgtype == "raw":
             out[yslice, xslice] = out[yslice, xslice] + im * conf
         elif imgtype == "overlap":
             out[yslice, xslice] = out[yslice, xslice] + conf
         elif imgtype == "pos_err":
-            out[yslice, xslice] = out[yslice, xslice] + \
-                conf * np.sum(np.array(abs_err) ** 2)
+            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
+                np.array(abs_err) ** 2
+            )
+    logger.debug("Lock %s released", lock_name)
 
 
 class Section:
@@ -204,7 +208,6 @@ class Section:
 
     def find_offsets(self):  # noqa: C901
         """Calculate offsets between all pairs of overlapping images"""
-        client = Client.current()
         # convert to find_shifts
         results = []
         logger.info("Processing section %s", self._section.name)
@@ -322,7 +325,7 @@ class Section:
                     res = delayed(find_overlap_conf)(
                         im1, im2, dist_conf, dist_conf, desp
                     )
-                    results.append(_sink(ref_img, obj_img, res, sign))
+                    results.append([ref_img, obj_img, res, sign])
 
                 else:
                     logger.debug(
@@ -335,10 +338,10 @@ class Section:
                     results.append([ref_img, obj_img, desp[0], desp[1], sign])
 
         if self.offset_mode == "sampled":
-            futures = client.compute(results)
+            futures = dask.compute(results)
             offsets = []
-            for fut in as_completed(futures):
-                i, j, res, sign = fut.result()
+            for fut in futures[0]:
+                i, j, res, sign = fut
                 dx, dy, mi, avf = res.x, res.y, res.mi, res.avg_flux
 
                 offsets.append([i, j, res, sign])
@@ -931,14 +934,14 @@ class Section:
 
         return (shape_0, shape_1)
 
-    def stitch(self, output: Path):
-        """Stitch and save all images"""
-
+    def done(self, output: Path):
         ds = xr.open_zarr(output / "mos.zarr")
         if self.name in ds:
-            logger.info("Section %s already done. Skipping.", self.name)
-            return
+            section = ds[self.name]
+            return len(section.y), len(section.x)
 
+    def stitch(self, output: Path):
+        """Stitch and save all images"""
         abs_pos, abs_err = self.compute_abspos()
         conf = self.get_distconf()
 
@@ -949,7 +952,15 @@ class Section:
 
         arr = self._compute_final_mosaic(z)
         ds = xr.Dataset({self._section.name: arr})
-        ds.to_zarr(output / "mos.zarr", mode="a")
+        for retries in range(10):
+            try:
+                ds.to_zarr(output / "mos.zarr", mode="a")
+                break
+            except Exception:
+                if retries == 3:
+                    raise
+                k = 2 ** (retries + 1) - 1
+                time.sleep(k * 30)
 
         # clean temporary mosaic
         shutil.rmtree(f"{output}/{self.name}.zarr", ignore_errors=True)
@@ -1013,7 +1024,17 @@ class STPTMosaic:
                 logger.debug("Downsampling mos%d [%s]", factor, s)
                 narr = ops.downsample(ds[s])
                 nds[s] = narr
-                nds.to_zarr(store, mode="a", group=down)
+
+                for retries in range(10):
+                    try:
+                        nds.to_zarr(store, mode="a", group=down)
+                        break
+                    except Exception:
+                        if retries == 3:
+                            raise
+                        k = 2 ** (retries + 1) - 1
+                        time.sleep(k * 30)
+
             logger.info("Downsampled mosaic saved %s:%s", store_name, down)
             up = down
         arr = zarr.open(f"{store_name}", mode="r+")

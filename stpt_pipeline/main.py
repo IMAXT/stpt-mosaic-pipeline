@@ -5,6 +5,7 @@ from owl_dev import pipeline
 from owl_dev.logging import logger
 from numcodecs import blosc
 
+from distributed import get_client
 from .settings import Settings
 from .stpt_fit_beads import find_beads
 from .stpt_bead_registration import register_slices
@@ -26,6 +27,17 @@ def _check_cals(cal_zarr_name: Path):
         logger.info('Using static calibrations')
 
     return _name, _type
+
+
+def restart_workers():
+    logger.debug("Restarting workers")
+    client = get_client()
+    client.restart()
+    try:
+        client.wait_for_workers(n_workers=1, timeout="300s")
+    except TimeoutError:
+        logger.critical("Timeout waiting for workers")
+        raise
 
 
 @pipeline  # noqa: C901
@@ -55,10 +67,8 @@ def main(
 
     mos = STPTMosaic(input_dir)
 
-    if reset:
-        mos.initialize_storage(output_dir)
-
     if "cals" in recipes:
+        # Can we skip this if already done and reset is False --> Carlos
         build_cals(mos, output_dir)
 
     if "mosaic" in recipes:
@@ -67,29 +77,35 @@ def main(
 
         # need to recheck because you can launch mosaic
         # without cals
-        cal_zarr_name, cal_type = _check_cals(
-            output_dir / 'cals.zarr'
-        )
+        cal_zarr_name, cal_type = _check_cals(output_dir / "cals.zarr")
 
         for section in mos.sections():
             if sections and (section.name not in sections):
                 continue
-            section.cal_type = cal_type
-            section.cal_zarr = cal_zarr_name
 
-            section.find_offsets()
-            section.stitch(output_dir)
-
-            # after the first section, stage size is fixed:
-            mos.stage_size = section.stage_size
+            stage_size = section.done(output_dir)
+            if stage_size is not None:
+                logger.info("Section %s already done. Skipping.", section.name)
+                mos.stage_size = stage_size
+            else:
+                restart_workers()
+                section.cal_type = cal_type
+                section.cal_zarr = cal_zarr_name
+                section.find_offsets()
+                section.stitch(output_dir)
+                mos.stage_size = section.stage_size
 
     if "downsample" in recipes:
+        # Can we skip this if already done and reset is False --> Carlos
+        restart_workers()
         mos.downsample(output_dir)
 
-    mos_dis = output_dir / "mos.zarr"
-
     if "beadfit" in recipes:
-        find_beads(mos_dis)
+        # Can we skip this if already done and reset is False --> Carlos
+        restart_workers()
+        find_beads(output_dir / "mos.zarr")
 
     if "beadreg" in recipes:
-        register_slices(mos_dis)
+        # Can we skip this if already done and reset is False --> Carlos
+        restart_workers()
+        register_slices(output_dir / "mos.zarr")
