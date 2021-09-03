@@ -8,15 +8,12 @@ import dask.array as da
 import numpy as np
 import scipy.ndimage as ndi
 import xarray as xr
-import zarr
-import dask
 from dask import delayed
 from owl_dev.logging import logger
 from scipy.optimize import minimize
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from tensorflow.keras.models import load_model
-from distributed import get_client, as_completed
 
 import warnings
 
@@ -411,22 +408,8 @@ def find_beads(mos_zarr: Path):  # noqa: C901
     model_window = 128
     window_offset = 32
 
-    # conversion from dict headers to more informative
-    # metadata names
-    bead_par_to_attr_name = {
-        "id": "bead_id",
-        "success": "bead_conv",
-        "fit_pars": "bead_fit_pars",
-        "r": "bead_rad",
-        "r_mask": "mask_rad",
-        "x": "bead_x",
-        "y": "bead_y",
-        "z": "bead_z",
-    }
-
     mos_full = xr.open_zarr(f"{mos_zarr}", group="")
     mos_zoom = xr.open_zarr(f"{mos_zarr}", group=f"l.{Settings.zoom_level}")
-    # bscale, bzero = mos_full.attrs['bscale'], mos_full.attrs['bzero']
 
     # channel check
     mean_per_channel = None
@@ -463,10 +446,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
     channels_for_beads = mos_zoom[this_slice].channel.values[mean_per_channel.argmax()]
 
+    bead_cat = {}
+
     for this_slice in sections:
 
         first_bead = True
-        bead_cat = {}
+        this_bead_cat = {}
 
         for this_optical in list(mos_full.z.values):
 
@@ -634,14 +619,16 @@ def find_beads(mos_zarr: Path):  # noqa: C901
                         continue
 
                     if first_bead:
-                        bead_cat[this_key] = [this_bead[this_key]]
+                        this_bead_cat[this_key] = [this_bead[this_key]]
                     else:
-                        bead_cat[this_key].append(this_bead[this_key])
+                        this_bead_cat[this_key].append(this_bead[this_key])
 
                 first_bead = False
 
-        # Store bead catalogue
-        out = f"{mos_zarr.parent}/beads.pkl"
-        logger.info("Saving bead catalogue to %s", out)
-        with open(out, "wb") as fh:
-            pickle.dump(bead_cat, fh)
+        bead_cat[this_slice] = this_bead_cat
+
+    # Store bead catalogue
+    out = f"{mos_zarr.parent}/beads.pkl"
+    logger.info("Saving bead catalogue to %s", out)
+    with open(out, "wb") as fh:
+        pickle.dump(bead_cat, fh)

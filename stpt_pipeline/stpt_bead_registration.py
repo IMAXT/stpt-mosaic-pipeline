@@ -1,4 +1,5 @@
 from pathlib import Path
+import pickle
 
 import numpy as np
 import xarray as xr
@@ -92,16 +93,14 @@ class bead_collection:
                 self.dy[i] = np.std(np.array(self.y_list[i]))
 
 
-def _get_beads(slice_obj, z_val):
-
-    z = np.array(slice_obj["bead_z"][:])
+def _get_beads(beads_cat, slice_name, z_val):
+    this_beads = beads_cat[slice_name]
+    z = np.array(this_beads["z"])
     i_t = np.where(z == z_val)
-
-    xc = np.array(slice_obj["bead_x"][:])[i_t]
-    yc = np.array(slice_obj["bead_y"][:])[i_t]
-    r_img = np.array(slice_obj["mask_rad"][:])[i_t]
-    ind = np.array(slice_obj["bead_id"][:])[i_t]
-
+    xc = np.array(this_beads["x"])[i_t]
+    yc = np.array(this_beads["y"])[i_t]
+    r_img = np.array(this_beads["r_mask"])[i_t]
+    ind = np.array(this_beads["id"])[i_t]
     return ind, xc, yc, r_img
 
 
@@ -205,7 +204,7 @@ def _shift_func(x, A, At, d, mat_var):
     return f / float(len(d)), grad_f / float(len(d))
 
 
-def _build_collection(mos_zarr, dx, dy, physical, optical):
+def _build_collection(beads_cat, dx, dy, physical, optical):
     """
     Builds a bead collection from the beads on
     a zarr metadata and the calculated displacements
@@ -219,7 +218,7 @@ def _build_collection(mos_zarr, dx, dy, physical, optical):
         dx_t = dx[i]
         dy_t = dy[i]
 
-        ind_r, x_r, y_r, r_r = _get_beads(mos_zarr[physical[i]].attrs, optical[i])
+        ind_r, x_r, y_r, r_r = _get_beads(beads_cat, physical[i], optical[i])
         id_str = []
         for this_id in ind_r:
             id_str.append(ref_slice + ":{0:05d}".format(int(this_id)))
@@ -255,6 +254,9 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     """
 
     mos_full = xr.open_zarr(f"{mos_zarr}")
+    out = f"{mos_zarr.parent}/beads.pkl"
+    with open(out, "rb") as fh:
+        beads_cat = pickle.load(fh)
 
     # putting all slices on a single list
     optical_slices = []
@@ -274,12 +276,10 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     for i in range(1, len(physical_slices)):
 
         # We compare each slice (_t) with the previous one (_r)
-        _, x_t, y_t, r_t = _get_beads(
-            mos_full[physical_slices[i]].attrs, optical_slices[i]
-        )
+        _, x_t, y_t, r_t = _get_beads(beads_cat, physical_slices[i], optical_slices[i])
 
         _, x_r, y_r, r_r = _get_beads(
-            mos_full[physical_slices[i - 1]].attrs, optical_slices[i - 1]
+            beads_cat, physical_slices[i - 1], optical_slices[i - 1]
         )
 
         # estimate of the error based on the radius
@@ -342,7 +342,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     abs_dx = np.array([np.sum(dx[0 : t + 1]) for t in range(len(dx))])
     abs_dy = np.array([np.sum(dy[0 : t + 1]) for t in range(len(dy))])
 
-    bb = _build_collection(mos_full, abs_dx, abs_dy, physical_slices, optical_slices)
+    bb = _build_collection(beads_cat, abs_dx, abs_dy, physical_slices, optical_slices)
 
     # For the 2nd pass, we calculate the shifts taking all beads into
     # account.
@@ -446,7 +446,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     # with the new displacements
 
     bb = _build_collection(
-        mos_full, resx["x"], resy["x"], physical_slices, optical_slices
+        beads_cat, resx["x"], resy["x"], physical_slices, optical_slices
     )
 
     # now for each slice, we get the average radial offset from the beads
@@ -454,9 +454,7 @@ def register_slices(mos_zarr: Path):  # noqa: C901
     abs_err = []
     for i in range(len(physical_slices)):
 
-        _, x_r, y_r, r_r = _get_beads(
-            mos_full[physical_slices[i]].attrs, optical_slices[i]
-        )
+        _, x_r, y_r, r_r = _get_beads(beads_cat, physical_slices[i], optical_slices[i])
 
         _dr = []
         for j in range(len(x_r)):
