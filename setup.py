@@ -18,7 +18,7 @@ requirements = [
     "scipy>=1.5",
     "voluptuous",
     "xarray",
-    "opencv-python",
+    "opencv-python-headless",
     "owl-pipeline-develop",
     "scikit-image>=0.18",
     "tensorflow",
