@@ -52,16 +52,20 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
 
     lock_name = f"{imgtype}-{ch}"
     logger.debug("Trying to acquire lock %s", lock_name)
-    with Lock(lock_name):
-        logger.debug("Lock %s acquired", lock_name)
-        if imgtype == "raw":
-            out[yslice, xslice] = out[yslice, xslice] + im * conf
-        elif imgtype == "overlap":
-            out[yslice, xslice] = out[yslice, xslice] + conf
-        elif imgtype == "pos_err":
-            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
-                np.array(abs_err) ** 2
-            )
+    lock = Lock(lock_name)
+    lock.acquire(timeout="30s")
+    logger.debug("Lock %s acquired", lock_name)
+    
+    if imgtype == "raw":
+        out[yslice, xslice] = out[yslice, xslice] + im * conf
+    elif imgtype == "overlap":
+        out[yslice, xslice] = out[yslice, xslice] + conf
+    elif imgtype == "pos_err":
+        out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
+            np.array(abs_err) ** 2
+        )
+        
+    lock.release()
     logger.debug("Lock %s released", lock_name)
 
 
