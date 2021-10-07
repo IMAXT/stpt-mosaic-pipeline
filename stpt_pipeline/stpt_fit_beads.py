@@ -9,6 +9,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import xarray as xr
 from dask import delayed
+from distributed import get_client, as_completed
 from owl_dev.logging import logger
 from scipy.optimize import minimize
 from skimage.feature import peak_local_max
@@ -545,10 +546,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
                 temp.append(dask.delayed(_fit_bead_zoomed)(_cut))
 
-            futures = dask.compute(temp)
+            client = get_client()
+            futures = client.compute(temp)
             done_x = [-10]
             done_y = [-10]
-            for t in futures[0]:
+            for fut in as_completed(futures):
+                t = fut.result()
                 if t["success"]:
                     # sometimes fits converge to the
                     # same bead from two neighbouring labels
@@ -586,10 +589,12 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
                 temp.append(delayed(_fit_bead_full)(_cut))
 
-            futures = dask.compute(temp)
+            client = get_client()
+            futures = client.compute(temp)
             done_x = [-10]
             done_y = [-10]
-            for t in futures[0]:
+            for fut in as_completed(futures):
+                t = fut.result()
                 if t["success"]:
                     r_done = np.sqrt(
                         (np.array(done_x) - t["x"]) ** 2
