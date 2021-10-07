@@ -538,13 +538,13 @@ def find_beads(mos_zarr: Path):  # noqa: C901
             temp = []
 
             for i in range(1, labels.max()):
-                # for i in range(1, 20):
-
                 this_bead = {"id": i, "fit": False}
 
-                _cut = _get_cutout_zoomed(im, da_labels, this_bead)
-
-                temp.append(dask.delayed(_fit_bead_zoomed)(_cut))
+                try:
+                    _cut = _get_cutout_zoomed(im, da_labels, this_bead)
+                    temp.append(dask.delayed(_fit_bead_zoomed)(_cut))
+                except:
+                    pass
 
             client = get_client()
             futures = client.compute(temp)
@@ -582,12 +582,13 @@ def find_beads(mos_zarr: Path):  # noqa: C901
 
             temp = []
             for i in range(len(temp_beads)):
-
                 this_bead = temp_beads[i]
 
-                _cut = _get_cutout_full(full_im, da_labels, this_bead)
-
-                temp.append(delayed(_fit_bead_full)(_cut))
+                try:
+                    _cut = _get_cutout_full(full_im, da_labels, this_bead)
+                    temp.append(delayed(_fit_bead_full)(_cut))
+                except:
+                    pass
 
             client = get_client()
             futures = client.compute(temp)
