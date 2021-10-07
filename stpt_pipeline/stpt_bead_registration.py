@@ -474,9 +474,6 @@ def register_slices(mos_zarr: Path):  # noqa: C901
             + "{0:.1f} ".format(abs_err[-1])
         )
 
-    for i in range(len(physical_slices)):
-        zarr_store = zarr.open(f"{mos_zarr}/{physical_slices[i]}", mode="a")
-
     ns = len(mos_full)
     nz = len(mos_full.z)
     physical_slices = physical_slices[::nz]
