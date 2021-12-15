@@ -20,7 +20,7 @@ requirements = [
     "xarray",
     "opencv-python-headless",
     "owl-pipeline-develop",
-    "scikit-image>=0.18",
+    "scikit-image>=0.18,<0.19",
     "tensorflow",
 ]
 
