@@ -72,8 +72,7 @@ def main(
         build_cals(mos, output_dir)
 
     if "mosaic" in recipes:
-        if reset:
-            mos.initialize_storage(output_dir)
+        mos.initialize_storage(output_dir, reset=reset)
 
         # need to recheck because you can launch mosaic
         # without cals

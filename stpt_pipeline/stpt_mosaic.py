@@ -992,13 +992,15 @@ class STPTMosaic:
         # sections
         self.stage_size = None
 
-    def initialize_storage(self, output: Path):
+    def initialize_storage(self, output: Path, reset=True):
         logger.info("Preparing mosaic output")
 
         ds = xr.Dataset()
         ds.attrs = self._ds.attrs
         ds.attrs["raw_meta"] = [ds.attrs["raw_meta"]]
-        ds.to_zarr(output / "mos.zarr", mode="w")
+        mos = output / "mos.zarr"
+        if reset or (mos.exists() is False):
+            ds.to_zarr(output / "mos.zarr", mode="w")
 
     def sections(self):
         """Sections generator"""
