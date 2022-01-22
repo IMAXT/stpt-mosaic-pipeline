@@ -83,7 +83,10 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     except Exception:
         pass
     
-    lock.release()
+    try:
+        lock.release()
+    except Exception:
+        pass
     logger.debug("Lock %s released", lock_name)
 
 
