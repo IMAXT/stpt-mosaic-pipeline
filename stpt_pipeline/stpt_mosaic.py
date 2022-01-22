@@ -1,30 +1,31 @@
+import json
 import os
 import shutil
+import time
+from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple
-import time
 
-import json
 import cv2
 import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
 import zarr
-from numcodecs import blosc
 from dask import delayed
-from datetime import datetime
-from distributed import Client, as_completed, Lock
+from distributed import Client, Lock, as_completed
 from imaxt_image.registration import find_overlap_conf
+from numcodecs import blosc
 from owl_dev.logging import logger
 from scipy.stats import median_absolute_deviation as mad
+
 import stpt_pipeline
 
 from . import ops
 from .geometric_distortion import apply_geometric_transform, read_calib
 from .retry import retry
 from .settings import Settings
-
 
 CHUNK_SIZE = 2080
 
@@ -52,41 +53,26 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
 
     lock_name = f"{imgtype}-{ch}"
     lock = Lock(lock_name)
-    res = False
-    i = 0
-    while not res:
-        logger.debug("Trying to acquire lock %s", lock_name)
-        res = lock.acquire(timeout="30s")
-        if not res:
-            time.sleep(10)
-        i = i + 1
-        if i > 5:
-            try:
-                lock.release()
-            except Exception:
-                pass
-        if i > 10:
-            logger.error("Failed to acquire lock %s", lock_name)
-            return
+    logger.debug("Trying to acquire lock %s", lock_name)
+    res = lock.acquire(timeout="300s")
+    if not res:
+        logger.error("Failed to acquire lock %s", lock_name)
+        with suppress(Exception):
+            lock.release()
+        return
 
     logger.debug("Lock %s acquired", lock_name)
-    
-    try:
-        if imgtype == "raw":
-            out[yslice, xslice] = out[yslice, xslice] + im * conf
-        elif imgtype == "overlap":
-            out[yslice, xslice] = out[yslice, xslice] + conf
-        elif imgtype == "pos_err":
-            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
-                np.array(abs_err) ** 2
-            )
-    except Exception:
-        pass
-    
-    try:
-        lock.release()
-    except Exception:
-        pass
+
+    if imgtype == "raw":
+        out[yslice, xslice] = out[yslice, xslice] + im * conf
+    elif imgtype == "overlap":
+        out[yslice, xslice] = out[yslice, xslice] + conf
+    elif imgtype == "pos_err":
+        out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
+            np.array(abs_err) ** 2
+        )
+
+    lock.release()
     logger.debug("Lock %s released", lock_name)
 
 
