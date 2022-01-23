@@ -55,17 +55,10 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     lock = Lock(lock_name)
     logger.debug("Trying to acquire lock %s", lock_name)
     res = False
-    i = 0
     while not res:
-        res = lock.acquire(timeout="30s")
+        res = lock.acquire(timeout="1s")
         if not res:
             time.sleep(10)
-        i += 1
-        if i > 10:
-            logger.error("Failed to acquire lock %s", lock_name)
-            with suppress(Exception):
-                lock.release()
-            return
 
     logger.debug("Lock %s acquired", lock_name)
 
