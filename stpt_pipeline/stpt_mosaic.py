@@ -54,23 +54,32 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     lock_name = f"{imgtype}-{ch}"
     lock = Lock(lock_name)
     logger.debug("Trying to acquire lock %s", lock_name)
-    res = lock.acquire(timeout="300s")
-    if not res:
-        logger.error("Failed to acquire lock %s", lock_name)
-        with suppress(Exception):
-            lock.release()
-        return
+    res = False
+    i = 0
+    while not res:
+        res = lock.acquire(timeout="30s")
+        if not res:
+            time.sleep(10)
+        i += 1
+        if i > 10:
+            logger.error("Failed to acquire lock %s", lock_name)
+            with suppress(Exception):
+                lock.release()
+            return
 
     logger.debug("Lock %s acquired", lock_name)
 
-    if imgtype == "raw":
-        out[yslice, xslice] = out[yslice, xslice] + im * conf
-    elif imgtype == "overlap":
-        out[yslice, xslice] = out[yslice, xslice] + conf
-    elif imgtype == "pos_err":
-        out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
-            np.array(abs_err) ** 2
-        )
+    try:
+        if imgtype == "raw":
+            out[yslice, xslice] = out[yslice, xslice] + im * conf
+        elif imgtype == "overlap":
+            out[yslice, xslice] = out[yslice, xslice] + conf
+        elif imgtype == "pos_err":
+            out[yslice, xslice] = out[yslice, xslice] + conf * np.sum(
+                np.array(abs_err) ** 2
+            )
+    except:
+        pass
 
     lock.release()
     logger.debug("Lock %s released", lock_name)
@@ -826,7 +835,7 @@ class Section:
                         x0 = int(abs_pos[i, 1] - x_delta)
                         res = _mosaic(
                             im_dis[i],
-                            ch,
+                            f"{sl}-{ch}",
                             conf,
                             (y0, x0),
                             abs_err,
@@ -834,7 +843,10 @@ class Section:
                             nimg,
                         )
                         results.append(res)
-            dask.compute(results)
+            n = 20
+            chunks = [results[i : i + n] for i in range(0, len(results), n)]
+            for chunk in chunks:
+                dask.compute(chunk)
             logger.debug("Mosaic %s Slice %d done", self.name, sl)
         return z
 
