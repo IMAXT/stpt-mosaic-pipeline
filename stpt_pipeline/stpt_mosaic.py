@@ -78,6 +78,27 @@ def _mosaic(im, ch, conf, pos, abs_err, imgtype, out):
     logger.debug("Lock %s released", lock_name)
 
 
+@delayed
+def _mosaic2(im, conf, abs_pos, x_delta, y_delta, abs_err, stage_size, grp):
+    assert grp is not None
+
+    raw = _get_image(grp, "raw", stage_size, dtype="float32")
+    pos_err = _get_image(grp, "pos_err", stage_size, dtype="float32")
+    overlap = _get_image(grp, "overlap", stage_size, dtype="float32")
+
+    for i in range(len(im)):
+        y0 = int(abs_pos[i, 0] - y_delta)
+        x0 = int(abs_pos[i, 1] - x_delta)
+        yslice = slice(y0, y0 + im.shape[0])
+        xslice = slice(x0, x0 + im.shape[1])
+
+        raw[yslice, xslice] = raw[yslice, xslice] + im[i] * conf
+        overlap[yslice, xslice] = overlap[yslice, xslice] + conf
+        pos_err[yslice, xslice] = pos_err[yslice, xslice] + conf * np.sum(
+            np.array(abs_err) ** 2
+        )
+
+
 class Section:
     """STPT section
 
@@ -820,26 +841,29 @@ class Section:
                     for im in im_t
                 ]
 
-                for imgtype in ["raw", "pos_err", "overlap"]:
-                    nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
+                # for imgtype in ["raw", "pos_err", "overlap"]:
+                #     nimg = _get_image(g, imgtype, self.stage_size, dtype="float32")
 
-                    for i in range(len(im_dis)):
-                        y0 = int(abs_pos[i, 0] - y_delta)
-                        x0 = int(abs_pos[i, 1] - x_delta)
-                        res = _mosaic(
-                            im_dis[i],
-                            f"{sl}-{ch}",
-                            conf,
-                            (y0, x0),
-                            abs_err,
-                            imgtype,
-                            nimg,
-                        )
-                        results.append(res)
-            n = 20
-            chunks = [results[i : i + n] for i in range(0, len(results), n)]
-            for chunk in chunks:
-                dask.compute(chunk)
+                # for i in range(len(im_dis)):
+                #     y0 = int(abs_pos[i, 0] - y_delta)
+                #     x0 = int(abs_pos[i, 1] - x_delta)
+                #     res = _mosaic(
+                #         im_dis[i],
+                #         f"{sl}-{ch}",
+                #         conf,
+                #         (y0, x0),
+                #         abs_err,
+                #         imgtype,
+                #         nimg,
+                #     )
+                res = _mosaic2(
+                    im_dis, conf, abs_pos, x_delta, y_delta, abs_err, self.stage_size, g
+                )
+                dask.compute(res)
+            # n = 20
+            # chunks = [results[i : i + n] for i in range(0, len(results), n)]
+            # for chunk in chunks:
+            #     dask.compute(chunk)
             logger.debug("Mosaic %s Slice %d done", self.name, sl)
         return z
 
