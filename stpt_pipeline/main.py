@@ -68,8 +68,10 @@ def main(
     mos = STPTMosaic(input_dir)
 
     if "cals" in recipes:
-        # Can we skip this if already done and reset is False --> Carlos
-        build_cals(mos, output_dir)
+        if (output_dir / "cals.zarr").is_dir() and not reset:
+            pass
+        else:
+            build_cals(mos, output_dir)
 
     if "mosaic" in recipes:
         mos.initialize_storage(output_dir, reset=reset)
