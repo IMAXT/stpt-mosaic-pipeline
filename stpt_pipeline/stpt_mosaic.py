@@ -89,8 +89,8 @@ def _mosaic2(im, conf, abs_pos, x_delta, y_delta, abs_err, stage_size, grp):
     for i in range(len(im)):
         y0 = int(abs_pos[i, 0] - y_delta)
         x0 = int(abs_pos[i, 1] - x_delta)
-        yslice = slice(y0, y0 + im.shape[0])
-        xslice = slice(x0, x0 + im.shape[1])
+        yslice = slice(y0, y0 + im[i].shape[0])
+        xslice = slice(x0, x0 + im[i].shape[1])
 
         raw[yslice, xslice] = raw[yslice, xslice] + im[i] * conf
         overlap[yslice, xslice] = overlap[yslice, xslice] + conf
