@@ -1006,7 +1006,7 @@ class STPTMosaic:
     def __init__(self, filename: Path):
         self.filename = filename
         # _ds points to the raw zarr
-        self._ds = xr.open_zarr(f"{filename}")
+        self._ds = xr.open_zarr(f"{filename}", consolidated=False)
 
         # this is to carry over the mosaic size between
         # sections
